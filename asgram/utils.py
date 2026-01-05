@@ -171,7 +171,8 @@ def _build_row(asg_row, constraints):
 
 def _sirds_row(asg, y, zar, mu=1/3, dpi=72, cross_eyed=False):
     asg_row = asg[:, :, y]
-    return _build_row(asg_row, _constrain(y, zar, mu, dpi, cross_eyed))
+    constraints = _constrain(y, zar, mu, dpi, cross_eyed)
+    return _build_row(asg_row, constraints)
 
 
 class DisjointSet:
@@ -245,9 +246,18 @@ def _dsdsc(y, zar, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     return constraints
 
 
+def _build_row_vectorized(asg_row, constraints):
+    constraints = np.asarray(constraints)
+    pointer_mask = ~(constraints == np.arange(constraints.size))
+    asg_row[:, pointer_mask] = asg_row[:, constraints[pointer_mask]]
+
+    return asg_row
+
+
 def _asg_row(asg, y, zar, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     asg_row = asg[:, :, y]
-    return _build_row(asg_row, _dsdsc(y, zar, mu, dpi, cross_eyed, approach))
+    constraints = _dsdsc(y, zar, mu, dpi, cross_eyed, approach)
+    return _build_row_vectorized(asg_row, constraints)
 
 
 def _conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
