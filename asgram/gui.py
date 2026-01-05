@@ -43,6 +43,8 @@ async def _make_autostereogram(
     match sirds_building_method:
         case 'Middle-Out':
             sirds_approach = 'mo'
+        case 'Out-In':
+            sirds_approach = 'oi'
         case 'Left-to-Right':
             sirds_approach = 'lr'
         case 'Full Random':
@@ -138,7 +140,11 @@ with gr.Blocks(title="samuelogram") as demo:
             ["Parallel", "Cross"], label="Viewing Method", filterable=False
         )
         building_method = gr.Dropdown(
-            ["Middle-Out", "Left-to-Right", "Right-to-Left", "Full Random"],
+            [
+                "Middle-Out", "Out-In",
+                "Left-to-Right", "Right-to-Left",
+                "Full Random"
+            ],
             label="Building Method", filterable=False
         )
         depth_of_field = gr.Slider(

@@ -100,7 +100,7 @@ def _pattern_maker(size, ref, fit='fit', mu=1/3, dpi=72, approach='rl'):
         upper = h + lower
 
         match approach:
-            case 'mo' | 'random':
+            case 'mo' | 'oi' | 'random':
                 lbound = round((asg.shape[1] - w) / 2)
                 rbound = w + lbound
                 asg = asg[:, lbound:rbound, lower:upper]
@@ -190,6 +190,10 @@ class DisjointSet:
     def _prefer(self, idx, jdx):
         if self.approach == 'mo':
             if abs(idx - self.mp) < abs(jdx - self.mp):
+                return idx, jdx
+            return jdx, idx
+        if self.approach == 'oi':
+            if abs(idx - self.mp) > abs(jdx - self.mp):
                 return idx, jdx
             return jdx, idx
         if self.approach == 'lr':
