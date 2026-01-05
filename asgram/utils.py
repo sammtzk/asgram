@@ -60,10 +60,11 @@ def _color_palette_maker(palette='bw'):
     return color_palette
 
 
-def _pattern_maker(size, ref, fit='fit', dpi=72, approach='rl'):
+def _pattern_maker(size, ref, fit='fit', mu=1/3, dpi=72, approach='rl'):
     w, h = size
     w_rep_len, h_rep_len = None, None
-    repeat_len = int(round(dpi * 0.9))
+    near = _pixel_separation(1, mu, dpi, cross_eyed=False)
+    repeat_len = int(round(near * 0.9))
 
     if any(ch.isnumeric() for ch in fit):
         # expect fit='tile=(w_reps)x(h_reps)'
@@ -111,9 +112,11 @@ def _pattern_maker(size, ref, fit='fit', dpi=72, approach='rl'):
     return asg
 
 
-def _sirds_init(zar, ref=None, fit='fit', dpi=72, approach='rl', palette='bw'):
+def _sirds_init(
+    zar, ref=None, fit='fit', mu=1/3, dpi=72, approach='rl', palette='bw'
+):
     if ref is not None:
-        asg = _pattern_maker(zar.shape, ref, fit, dpi, approach)
+        asg = _pattern_maker(zar.shape, ref, fit, mu, dpi, approach)
     else:
         color_pal = _color_palette_maker(palette)
         asg = np.array(

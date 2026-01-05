@@ -73,7 +73,7 @@ def sirds(
     """
     np.random.seed(random_seed)
     zar = _prepare_z_arr(img, mu, dpi, normalize, invert, pad, scale)
-    asg = _sirds_init(zar, ref_img, ref_fit, dpi, approach, palette)
+    asg = _sirds_init(zar, ref_img, ref_fit, mu, dpi, approach, palette)
 
     jobs = determine_processes(num_jobs)
     if 1 < jobs:
@@ -111,7 +111,7 @@ async def sirds_async(
     """
     np.random.seed(random_seed)
     zar = _prepare_z_arr(img, mu, dpi, normalize, invert, pad, scale)
-    asg = _sirds_init(zar, ref_img, ref_fit, dpi, approach, palette)
+    asg = _sirds_init(zar, ref_img, ref_fit, mu, dpi, approach, palette)
 
     jobs = set_processes(num_jobs, concurrency_limit)
     if 1 < jobs:
@@ -156,7 +156,7 @@ def sirds_convergence(
     animation. Animation saved as GIF to the path provided.
     """
     far = _pixel_separation(0, mu, dpi, cross_eyed=False)
-    near = dpi
+    near = _pixel_separation(1, mu, dpi, cross_eyed=False)
 
     # Treat Stereogram White Dots as Transparent
     s0 = Image.open(img_path).convert('1').convert('L')
