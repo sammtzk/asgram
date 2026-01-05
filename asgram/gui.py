@@ -11,8 +11,8 @@ import gradio as gr
 from gradio import themes
 
 try:
-    from sgram.art import sirds_async
-    from sgram.parallelize.gradio_process import set_processes, executor_init
+    from asgram.art import sirds_async
+    from asgram.parallelize.gradio_process import set_processes, executor_init
 except ModuleNotFoundError:
     from art import sirds_async
     from parallelize.gradio_process import set_processes, executor_init

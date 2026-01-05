@@ -6,7 +6,7 @@ Utility functions for the creation of autostereograms.
 import numpy as np
 from matplotlib import colormaps
 try:
-    from sgram.tiw import _do_work, _separation
+    from asgram.tiw import _do_work, _separation
 except ModuleNotFoundError:
     from tiw import _do_work, _separation
 
