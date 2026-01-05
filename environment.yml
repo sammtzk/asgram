@@ -1,0 +1,17 @@
+# environment.yml
+name: asgram
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - numpy
+  - pillow
+  - matplotlib
+  - ipython
+  - ipykernel
+  - ipywidgets
+  - pip
+  - pip:
+    - gradio
+    - opencv-python
