@@ -4,6 +4,7 @@ Utility functions for the creation of autostereograms.
 """
 
 import numpy as np
+import cv2 as cv
 from matplotlib import colormaps
 try:
     from asgram.tiw import _do_work, _separation
@@ -20,6 +21,38 @@ def _resize_img(_img, mult=1.0):
     if 0.0 < mult and 1.0 != mult:
         _img = _img.resize([int(round(n * np.sqrt(mult))) for n in _img.size])
     return _img
+
+
+def _kitsch_smooth_img_array(_arr, mu=1/3, dpi=72, smoothing_amt=0):
+    if smoothing_amt > 0:
+        far = _pixel_separation(0, mu, dpi, cross_eyed=False)
+        near = _pixel_separation(1, mu, dpi, cross_eyed=False)
+        detail = np.ceil(255 / (far - near))
+
+        ls_arr = np.roll(_arr, shift=-1, axis=0)
+        rs_arr = np.roll(_arr, shift=1, axis=0)
+
+        rmask = np.abs(_arr - rs_arr) < detail
+        lmask = np.abs(_arr - ls_arr) < detail
+
+        mask = rmask | lmask
+        ls_amt = -int(round(smoothing_amt / 2))
+        rs_amt = ls_amt + smoothing_amt
+        for i in range(abs(ls_amt)):
+            mask = mask & np.roll(mask, shift=-(i + 1), axis=0)
+        for i in range(abs(rs_amt)):
+            mask = mask & np.roll(mask, shift=(i + 1), axis=0)
+
+        # pylint: disable=no-member
+        hsmooth = cv.GaussianBlur(_arr, (1, smoothing_amt), 0)
+        _arr[mask] = hsmooth[mask]
+
+    return _arr
+
+
+def _smooth_img_array(_arr):
+    # pylint: disable=no-member
+    return cv.bilateralFilter(_arr, 9, 75, 75)
 
 
 def _invert_img_array(_arr):
@@ -41,9 +74,11 @@ def _pad_img_array(_arr, mu=1/3, dpi=72):
 
 
 def _prepare_z_arr(
-    img, mu=1/3, dpi=72, normalize=True, invert=False, pad=False, scale=1.0
+    img, mu=1/3, dpi=72,
+    normalize=True, invert=False, smooth=False, pad=False, scale=1.0
 ):
     zar = np.array(_resize_img(img.copy().convert('L'), scale)).T
+    zar = _smooth_img_array(zar) if smooth else zar
     zar = _invert_img_array(zar) if invert else zar
     zar = _normalize_img_array(zar, normalize)
     zar = _pad_img_array(zar, mu, dpi) if pad else zar
@@ -178,6 +213,7 @@ def _sirds_row(asg, y, zar, mu=1/3, dpi=72, cross_eyed=False):
 class DisjointSet:
     """Data structure for traversing pixel constraints. Modified union find."""
     def __init__(self, list_size, approach='rl'):
+        self.size = list_size
         self.parent = list(range(list_size))
         self.approach = approach
         self.mp = (list_size - 1) / 2
@@ -210,8 +246,21 @@ class DisjointSet:
             root, other = self._prefer(irep, jrep)
             self.parent[other] = root
 
+    def unite_to_neighbor(self, idx):
+        """Join a value to a neighboring root."""
+        left = idx - 1
+        right = idx + 1
+        if 0 <= left:
+            if self.size > right:
+                root, _ = self._prefer(self.find(left), self.find(right))
+                self.parent[idx] = root
+            else:
+                self.parent[idx] = self.find(left)
+        else:
+            self.parent[idx] = self.find(right)
 
-def _dsdsc(y, zar, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
+
+def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     """Disjoint Set Data Structure Constrain"""
     w = zar.shape[0]
     eye_scalar = round(2.5 * dpi)
@@ -238,25 +287,40 @@ def _dsdsc(y, zar, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
                 visible_pixels[right] = True
 
     for i in constraints:
-        if False:  # not visible_pixels[i]:
-            constraints[i] = -99
-        else:
-            constraints[i] = constraints_structure.find(i)
+        if not visible_pixels[i] and ref is not None:
+            constraints_structure.unite_to_neighbor(i)
+        constraints[i] = constraints_structure.find(i)
+
+        # if visible_pixels[i]:
+        #     constraints[i] = constraints_structure.find(i)
+        # else:
+        #     constraints_structure.unite_to_neighbor(i)
+        #     constraints[i] = constraints_structure.find(i)
+        #     # constraints[i] = -99
 
     return constraints
 
 
 def _build_row_vectorized(asg_row, constraints):
     constraints = np.asarray(constraints)
-    pointer_mask = ~(constraints == np.arange(constraints.size))
-    asg_row[:, pointer_mask] = asg_row[:, constraints[pointer_mask]]
+    same = constraints == np.arange(constraints.size)
+    not_visible = constraints == -99
+    pointers = ~(same | not_visible)
+
+    if np.any(pointers):
+        asg_row[:, pointers] = asg_row[:, constraints[pointers]]
+
+    if np.any(not_visible):
+        asg_row[:, not_visible] = np.array([255, 0, 0])[:, None]
 
     return asg_row
 
 
-def _asg_row(asg, y, zar, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
+def _asg_row(
+    asg, y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'
+):
     asg_row = asg[:, :, y]
-    constraints = _dsdsc(y, zar, mu, dpi, cross_eyed, approach)
+    constraints = _dsdsc(y, zar, ref, mu, dpi, cross_eyed, approach)
     return _build_row_vectorized(asg_row, constraints)
 
 

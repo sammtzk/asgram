@@ -1,7 +1,6 @@
 # sgram/gui.py
 """
 gooey. want to specify png output with a path.
-maybe sirds options should be dot_location and dot_depth or smth.
 """
 
 import os
@@ -27,8 +26,8 @@ async def _make_autostereogram(
     sirds_ref_image_w_reps, sirds_ref_image_h_reps,
     sirds_depth_of_field, sirds_dots_per_inch,
     sirds_viewing_method, sirds_building_method,
-    sirds_normalize_depth_map, sirds_invert_depth_map, sirds_pad_depth_map,
-    sirds_scale_image,
+    sirds_normalize_depth_map, sirds_invert_depth_map, sirds_smooth_depth_map,
+    sirds_pad_depth_map, sirds_scale_image,
     sirds_bw_or_color, sirds_color_set,
     sirds_draw_conv_dots, sirds_conv_dot_depth,
     sirds_random_seed, sirds_number_of_jobs
@@ -76,13 +75,15 @@ async def _make_autostereogram(
         approach=sirds_approach,
         normalize=sirds_normalize_depth_map,
         invert=sirds_invert_depth_map,
+        smooth=sirds_smooth_depth_map,
         pad=sirds_pad_depth_map,
         scale=sirds_scale_image,
         palette=sirds_color_set,
         dot_depth=sirds_conv_dot_depth,
         dot_height=sirds_conv_dot_height,
         random_seed=sirds_random_seed,
-        num_jobs=sirds_number_of_jobs, concurrency_limit=CONCURRENT_USERS
+        num_jobs=sirds_number_of_jobs,
+        concurrency_limit=CONCURRENT_USERS
     )
 
 
@@ -125,6 +126,7 @@ with gr.Blocks(title="samuelogram") as demo:
     ) as dmoptions:
         normalize_depth_map = gr.Checkbox(True, label="Normalize")
         invert_depth_map = gr.Checkbox(False, label="Invert")
+        smooth_depth_map = gr.Checkbox(False, label="Smooth")
         pad_depth_map = gr.Checkbox(False, label="Pad Horizontal")
         scale_image = gr.Slider(
             0.25, 4.0, value=1.0, step=0.25, label="Resize"
@@ -276,8 +278,8 @@ with gr.Blocks(title="samuelogram") as demo:
             ref_image_w_reps, ref_image_h_reps,
             depth_of_field, dots_per_inch,
             viewing_method, building_method,
-            normalize_depth_map, invert_depth_map, pad_depth_map,
-            scale_image,
+            normalize_depth_map, invert_depth_map, smooth_depth_map,
+            pad_depth_map, scale_image,
             bw_or_color, color_set,
             draw_conv_dots, conv_dot_depth,
             set_random_seed, number_of_jobs

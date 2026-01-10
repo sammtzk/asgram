@@ -27,13 +27,15 @@ except ModuleNotFoundError:
 
 # Stereogram
 def _p_worker(args):
-    pull_from, zar, mu, dpi, cross, approach, ys_to_build = args
+    pull_from, zar, ref, mu, dpi, cross, approach, ys_to_build = args
     asg = np.zeros_like(pull_from)
     total = len(ys_to_build)
     prog = int(np.ceil(total / UPDATE_COUNTER))
 
     for i, y in enumerate(ys_to_build):
-        asg[:, :, y] = _asg_row(pull_from, y, zar, mu, dpi, cross, approach)
+        asg[:, :, y] = _asg_row(
+            pull_from, y, zar, ref, mu, dpi, cross, approach
+        )
 
         if STOP_EARLY.is_set():
             break
@@ -45,11 +47,13 @@ def _p_worker(args):
 
 
 def _g_worker(args):
-    pull_from, zar, mu, dpi, cross, approach, ys_to_build = args
+    pull_from, zar, ref, mu, dpi, cross, approach, ys_to_build = args
     asg = np.zeros_like(pull_from)
 
     for y in ys_to_build:
-        asg[:, :, y] = _asg_row(pull_from, y, zar, mu, dpi, cross, approach)
+        asg[:, :, y] = _asg_row(
+            pull_from, y, zar, ref, mu, dpi, cross, approach
+        )
 
     return asg
 
@@ -57,7 +61,8 @@ def _g_worker(args):
 def sirds(
     img, ref_img=None, ref_fit='fit',
     mu=1/3, dpi=72, cross=False, approach='rl',
-    normalize=True, invert=False, pad=False, scale=1.0, palette='bw',
+    normalize=True, invert=False, smooth=False, pad=False, scale=1.0,
+    palette='bw',
     dot_depth=0.0, dot_height='bottom',
     random_seed=1132,
     num_jobs=8
@@ -72,20 +77,25 @@ def sirds(
     will draw at the near plane. Values outside of [0, 1] will not draw.
     """
     np.random.seed(random_seed)
-    zar = _prepare_z_arr(img, mu, dpi, normalize, invert, pad, scale)
+    zar = _prepare_z_arr(img, mu, dpi, normalize, invert, smooth, pad, scale)
     asg = _sirds_init(zar, ref_img, ref_fit, mu, dpi, approach, palette)
 
     jobs = determine_processes(num_jobs)
     if 1 < jobs:
         chunks = np.array_split(list(range(zar.shape[1])), jobs)
-        _args = [(asg, zar, mu, dpi, cross, approach, c) for c in chunks]
+        _args = [
+            (asg, zar, ref_img, mu, dpi, cross, approach, c)
+            for c in chunks
+        ]
         results = pool_runs(_p_worker, _args, zar.shape[1], jobs)
         asg = np.zeros_like(asg)
         for r in results:
             asg += r
     else:
         for y in range(zar.shape[1]):
-            asg[:, :, y] = _asg_row(asg, y, zar, mu, dpi, cross, approach)
+            asg[:, :, y] = _asg_row(
+                asg, y, zar, ref_img, mu, dpi, cross, approach
+            )
 
     asg = _conv_dots(asg, dot_depth, dot_height, mu, dpi, cross)
 
@@ -95,7 +105,8 @@ def sirds(
 async def sirds_async(
     img, ref_img=None, ref_fit='fit',
     mu=1/3, dpi=72, cross=False, approach='rl',
-    normalize=True, invert=False, pad=False, scale=1.0, palette='bw',
+    normalize=True, invert=False, smooth=False, pad=False, scale=1.0,
+    palette='bw',
     dot_depth=0.0, dot_height='bottom',
     random_seed=1132,
     num_jobs=5, concurrency_limit=4
@@ -110,20 +121,25 @@ async def sirds_async(
     will draw at the near plane. Values outside of [0, 1] will not draw.
     """
     np.random.seed(random_seed)
-    zar = _prepare_z_arr(img, mu, dpi, normalize, invert, pad, scale)
+    zar = _prepare_z_arr(img, mu, dpi, normalize, invert, smooth, pad, scale)
     asg = _sirds_init(zar, ref_img, ref_fit, mu, dpi, approach, palette)
 
     jobs = set_processes(num_jobs, concurrency_limit)
     if 1 < jobs:
         chunks = np.array_split(list(range(zar.shape[1])), jobs)
-        _args = [(asg, zar, mu, dpi, cross, approach, c) for c in chunks]
+        _args = [
+            (asg, zar, ref_img, mu, dpi, cross, approach, c)
+            for c in chunks
+        ]
         results = await executor_runs(_g_worker, _args)
         asg = np.zeros_like(asg)
         for r in results:
             asg += r
     else:
         for y in range(zar.shape[1]):
-            asg[:, :, y] = _asg_row(asg, y, zar, mu, dpi, cross, approach)
+            asg[:, :, y] = _asg_row(
+                asg, y, zar, ref_img, mu, dpi, cross, approach
+            )
 
     asg = _conv_dots(asg, dot_depth, dot_height, mu, dpi, cross)
 
