@@ -1,6 +1,7 @@
 # sgram/utils.py
 """
-Utility functions for the creation of autostereograms.
+Utility functions for the creation of autostereograms. I should make an asg
+params data class.
 """
 
 import numpy as np
@@ -98,8 +99,7 @@ def _color_palette_maker(palette='bw'):
 def _pattern_maker(size, ref, fit='fit', mu=1/3, dpi=72, approach='rl'):
     w, h = size
     w_rep_len, h_rep_len = None, None
-    near = _pixel_separation(1, mu, dpi, cross_eyed=False)
-    repeat_len = int(round(near * 0.9))
+    repeat_len = _pixel_separation(0, mu, dpi, cross_eyed=False)
 
     if any(ch.isnumeric() for ch in fit):
         # expect fit='tile=(w_reps)x(h_reps)'
@@ -294,10 +294,28 @@ class DisjointSet:
                 mi = 0
                 ma = mi + self.source_size
 
-            src_vals = np.linspace(mi, ma, num=ma + 1).astype(int).tolist()
+            src_vals = np.linspace(mi, ma - 1, num=ma).astype(int).tolist()
             for i in range(self.size):
                 old_root = self.parent[i]
                 if old_root not in src_vals:
+                    new_root = self.unite_to_neighbor(i, return_new_root=True)
+                    self._reassign_root(old_root, new_root)
+
+    def enforce_nearby(self):
+        """Ensure unconstrained pixels draw from similar nearby sources."""
+        for i in range(self.size):
+            old_root = self.parent[i]
+            if old_root == i:
+                switch_flag = False
+                lrep = self.find(i - 1) if i > 0 else None
+                if lrep is not None:
+                    if abs(lrep - old_root) > 9:
+                        switch_flag = True
+                rrep = self.find(i + 1) if i < self.size - 1 else None
+                if rrep is not None and not switch_flag:
+                    if abs(rrep - old_root) > 9:
+                        switch_flag = True
+                if switch_flag:
                     new_root = self.unite_to_neighbor(i, return_new_root=True)
                     self._reassign_root(old_root, new_root)
 
@@ -323,12 +341,13 @@ def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
             while visible and (zt < 1):
                 t, zt, visible = _do_work(t, zar, x, y, mu, eye_scalar)
 
-            # if visible:
-            # constraints_structure.unite(left, right)
-            constraints_structure.smart_unite(left, right, zar[x, y])
-            visible_pixels[left] = True
-            visible_pixels[right] = True
+            if visible:
+                constraints_structure.unite(left, right)
+                # constraints_structure.smart_unite(left, right, zar[x, y])
+                visible_pixels[left] = True
+                visible_pixels[right] = True
 
+    constraints_structure.enforce_nearby()
     constraints_structure.enforce_source()
 
     for i in constraints:
