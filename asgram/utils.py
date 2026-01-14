@@ -78,9 +78,9 @@ def _prepare_z_arr(
     normalize=True, invert=False, smooth=False, pad=False, scale=1.0
 ):
     zar = np.array(_resize_img(img.copy().convert('L'), scale)).T
-    zar = _smooth_img_array(zar) if smooth else zar
     zar = _invert_img_array(zar) if invert else zar
     zar = _normalize_img_array(zar, normalize)
+    zar = _smooth_img_array(zar) if smooth else zar
     zar = _pad_img_array(zar, mu, dpi) if pad else zar
     return zar
 
@@ -212,9 +212,11 @@ def _sirds_row(asg, y, zar, mu=1/3, dpi=72, cross_eyed=False):
 
 class DisjointSet:
     """Data structure for traversing pixel constraints. Modified union find."""
-    def __init__(self, list_size, approach='rl'):
+    def __init__(self, list_size, mu=1/3, dpi=72, approach='rl'):
         self.size = list_size
+        self.source_size = _pixel_separation(0, mu, dpi, cross_eyed=False)
         self.parent = list(range(list_size))
+        self.depths = [0.0] * list_size
         self.approach = approach
         self.mp = (list_size - 1) / 2
 
@@ -246,25 +248,65 @@ class DisjointSet:
             root, other = self._prefer(irep, jrep)
             self.parent[other] = root
 
-    def unite_to_neighbor(self, idx):
+    def smart_unite(self, idx, jdx, source_depth):
+        """Join values."""
+        irep, jrep = self.find(idx), self.find(jdx)
+        self.depths[irep] = max(self.depths[irep], source_depth)
+        self.depths[jrep] = max(self.depths[jrep], source_depth)
+
+        if irep != jrep:
+            irep_depth, jrep_depth = self.depths[irep], self.depths[jrep]
+            if irep_depth > jrep_depth:
+                self.parent[jrep] = irep
+            elif irep_depth < jrep_depth:
+                self.parent[irep] = jrep
+            else:
+                root, other = self._prefer(irep, jrep)
+                self.parent[other] = root
+
+    def unite_to_neighbor(self, idx, return_new_root=False):
         """Join a value to a neighboring root."""
         left = idx - 1
         right = idx + 1
         if 0 <= left:
             if self.size > right:
-                root, _ = self._prefer(self.find(left), self.find(right))
-                self.parent[idx] = root
+                new_root, _ = self._prefer(self.find(left), self.find(right))
             else:
-                self.parent[idx] = self.find(left)
+                new_root = self.find(left)
         else:
-            self.parent[idx] = self.find(right)
+            new_root = self.find(right)
+        self.parent[idx] = new_root
+        if return_new_root:
+            return new_root
+
+    def _reassign_root(self, old_root, new_root):
+        for i in range(self.size):
+            if self.parent[i] == old_root:
+                self.parent[i] = new_root
+
+    def enforce_source(self):
+        """Ensure that values have roots from source."""
+        if self.approach in ['rl', 'lr']:  # , 'mo', 'oi']:
+            if self.approach == 'rl':
+                ma = self.size
+                mi = ma - self.source_size
+            else:  # if self.approach == 'lr':
+                mi = 0
+                ma = mi + self.source_size
+
+            src_vals = np.linspace(mi, ma, num=ma + 1).astype(int).tolist()
+            for i in range(self.size):
+                old_root = self.parent[i]
+                if old_root not in src_vals:
+                    new_root = self.unite_to_neighbor(i, return_new_root=True)
+                    self._reassign_root(old_root, new_root)
 
 
 def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     """Disjoint Set Data Structure Constrain"""
     w = zar.shape[0]
     eye_scalar = round(2.5 * dpi)
-    constraints_structure = DisjointSet(w, approach)
+    constraints_structure = DisjointSet(w, mu, dpi, approach)
     constraints = list(range(w))
     scan_order = constraints.copy()
     visible_pixels = [False] * w
@@ -281,10 +323,13 @@ def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
             while visible and (zt < 1):
                 t, zt, visible = _do_work(t, zar, x, y, mu, eye_scalar)
 
-            if visible:
-                constraints_structure.unite(left, right)
-                visible_pixels[left] = True
-                visible_pixels[right] = True
+            # if visible:
+            # constraints_structure.unite(left, right)
+            constraints_structure.smart_unite(left, right, zar[x, y])
+            visible_pixels[left] = True
+            visible_pixels[right] = True
+
+    constraints_structure.enforce_source()
 
     for i in constraints:
         if not visible_pixels[i] and ref is not None:
