@@ -214,11 +214,42 @@ class DisjointSet:
     """Data structure for traversing pixel constraints. Modified union find."""
     def __init__(self, list_size, mu=1/3, dpi=72, approach='rl'):
         self.size = list_size
-        self.source_size = _pixel_separation(0, mu, dpi, cross_eyed=False)
-        self.parent = list(range(list_size))
-        self.depths = [0.0] * list_size
+        self.far = _pixel_separation(0, mu, dpi, cross_eyed=False)
+        self.parent = list(range(self.size))
+        self.depths = [0.0] * self.size
         self.approach = approach
-        self.mp = (list_size - 1) / 2
+        self.mp = (self.size - 1) / 2
+
+        if self.approach in ['rl', 'lr', 'mo']:
+            if self.approach == 'rl':
+                ma = self.size
+                mi = ma - self.far
+            elif self.approach == 'lr':
+                mi = 0
+                ma = mi + self.far
+            else:   # 'mo'
+                mi = round(self.mp - self.far / 2)
+                ma = mi + self.far
+
+            self.src = np.linspace(mi, ma - 1, self.far).astype(int).tolist()
+            assert len(self.src) == self.far
+
+        elif self.approach == 'oi':
+            lsize = round(self.far / 2)
+            lmi = 0
+            lma = lmi + lsize
+            lsource = np.linspace(lmi, lma - 1, num=lsize).astype(int).tolist()
+
+            rsize = self.far - lsize
+            rma = self.size
+            rmi = rma - rsize
+            rsource = np.linspace(rmi, rma - 1, num=rsize).astype(int).tolist()
+
+            self.src = lsource + rsource
+            assert len(self.src) == self.far
+
+        else:
+            self.src = None
 
     def find(self, idx):
         """Find the representative of a set."""
@@ -275,7 +306,9 @@ class DisjointSet:
                 new_root = self.find(left)
         else:
             new_root = self.find(right)
+
         self.parent[idx] = new_root
+
         if return_new_root:
             return new_root
 
@@ -284,38 +317,42 @@ class DisjointSet:
             if self.parent[i] == old_root:
                 self.parent[i] = new_root
 
-    def enforce_source(self):
+    def enforce_source(self, idx):
         """Ensure that values have roots from source."""
-        if self.approach in ['rl', 'lr']:  # , 'mo', 'oi']:
-            if self.approach == 'rl':
-                ma = self.size
-                mi = ma - self.source_size
-            else:  # if self.approach == 'lr':
-                mi = 0
-                ma = mi + self.source_size
+        if self.src is not None:
+            old_root = self.parent[idx]
+            if old_root not in self.src:
+                new_root = self.unite_to_neighbor(idx, return_new_root=True)
+                self._reassign_root(old_root, new_root)
 
-            src_vals = np.linspace(mi, ma - 1, num=ma).astype(int).tolist()
+    def global_enforce_source(self):
+        """Ensure that all values have roots from source."""
+        if self.src is not None:
             for i in range(self.size):
-                old_root = self.parent[i]
-                if old_root not in src_vals:
-                    new_root = self.unite_to_neighbor(i, return_new_root=True)
-                    self._reassign_root(old_root, new_root)
+                self.enforce_source(i)
 
-    def enforce_nearby(self):
+    def global_enforce_nearby(self, thresh=9):
         """Ensure unconstrained pixels draw from similar nearby sources."""
         for i in range(self.size):
             old_root = self.parent[i]
             if old_root == i:
-                switch_flag = False
+                switch_flag = 0
+
                 lrep = self.find(i - 1) if i > 0 else None
                 if lrep is not None:
-                    if abs(lrep - old_root) > 9:
-                        switch_flag = True
+                    if abs(lrep - old_root) > thresh:
+                        switch_flag += 1
+                else:
+                    switch_flag += 1
+
                 rrep = self.find(i + 1) if i < self.size - 1 else None
-                if rrep is not None and not switch_flag:
-                    if abs(rrep - old_root) > 9:
-                        switch_flag = True
-                if switch_flag:
+                if rrep is not None:
+                    if abs(rrep - old_root) > thresh:
+                        switch_flag += 1
+                else:
+                    switch_flag += 1
+
+                if switch_flag == 2:
                     new_root = self.unite_to_neighbor(i, return_new_root=True)
                     self._reassign_root(old_root, new_root)
 
@@ -347,12 +384,14 @@ def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
                 visible_pixels[left] = True
                 visible_pixels[right] = True
 
-    constraints_structure.enforce_nearby()
-    constraints_structure.enforce_source()
+    constraints_structure.global_enforce_nearby(1)
+    constraints_structure.global_enforce_nearby(5)
+    constraints_structure.global_enforce_nearby(9)
+    constraints_structure.global_enforce_source()
 
     for i in constraints:
-        if not visible_pixels[i] and ref is not None:
-            constraints_structure.unite_to_neighbor(i)
+        # if not visible_pixels[i] and ref is not None:
+        #     constraints_structure.unite_to_neighbor(i)
         constraints[i] = constraints_structure.find(i)
 
         # if visible_pixels[i]:
