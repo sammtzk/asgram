@@ -196,10 +196,7 @@ def _constrain(y, zar, mu=1/3, dpi=72, cross_eyed=False):
 def _build_row(asg_row, constraints):
     for x in range(asg_row.shape[1]):
         if constraints[x] != x:
-            if constraints[x] != -99:
-                asg_row[:, x] = asg_row[:, constraints[x]]
-            else:
-                asg_row[:, x] = (255, 0, 0)
+            asg_row[:, x] = asg_row[:, constraints[x]]
 
     return asg_row
 
@@ -279,7 +276,7 @@ class DisjointSet:
             root, other = self._prefer(irep, jrep)
             self.parent[other] = root
 
-    def smart_unite(self, idx, jdx, source_depth):
+    def depth_unite(self, idx, jdx, source_depth):
         """Join values."""
         irep, jrep = self.find(idx), self.find(jdx)
         self.depths[irep] = max(self.depths[irep], source_depth)
@@ -331,6 +328,62 @@ class DisjointSet:
             for i in range(self.size):
                 self.enforce_source(i)
 
+    def enforce_nearby(self, idx, thresh=9):
+        """Ensure that a pixel draws from similar nearby sources."""
+        old_root = self.parent[idx]
+        switch_flag = 0
+
+        lrep = self.find(idx - 1) if idx > 0 else np.nan
+        if not np.isnan(lrep):
+            if abs(lrep - old_root) > thresh:
+                switch_flag += 1
+        else:
+            switch_flag += 1
+
+        rrep = self.find(idx + 1) if idx < self.size - 1 else np.nan
+        if not np.isnan(rrep):
+            if abs(rrep - old_root) > thresh:
+                switch_flag += 1
+        else:
+            switch_flag += 1
+
+        if switch_flag == 2:
+            if np.isnan(lrep) or np.isnan(rrep):
+                _mp01 = np.nanmean([lrep, rrep])   # type: ignore
+                nr0 = np.floor(_mp01).astype(int)
+                nr1 = np.ceil(_mp01).astype(int)
+                new_root, _ = self._prefer(nr0, nr1)
+            else:
+                nr, _ = self._prefer(lrep, rrep)
+                sf = 0
+
+                nr0 = self.find(idx - 1) if idx > 0 else np.nan
+                if not np.isnan(nr0):
+                    if abs(nr0 - old_root) > thresh:
+                        sf += 1
+                else:
+                    sf += 1
+
+                nr1 = self.find(idx + 1) if idx < self.size - 1 else np.nan
+                if not np.isnan(nr1):
+                    if abs(nr1 - old_root) > thresh:
+                        sf += 1
+                else:
+                    sf += 1
+
+                if sf == 2:
+                    if np.isnan(nr0) or np.isnan(nr1):
+                        _mp01 = np.nanmean([nr0, nr1])   # type: ignore
+                        nr2 = np.floor(_mp01).astype(int)
+                        nr3 = np.ceil(_mp01).astype(int)
+                        new_root, _ = self._prefer(nr2, nr3)
+                    else:
+                        new_root, _ = self._prefer(nr0, nr1)
+                else:
+                    new_root = nr
+
+            self._reassign_root(old_root, new_root)
+
     def global_enforce_nearby(self, thresh=9):
         """Ensure unconstrained pixels draw from similar nearby sources."""
         for i in range(self.size):
@@ -338,22 +391,28 @@ class DisjointSet:
             if old_root == i:
                 switch_flag = 0
 
-                lrep = self.find(i - 1) if i > 0 else None
-                if lrep is not None:
+                lrep = self.find(i - 1) if i > 0 else np.nan
+                if not np.isnan(lrep):
                     if abs(lrep - old_root) > thresh:
                         switch_flag += 1
                 else:
                     switch_flag += 1
 
-                rrep = self.find(i + 1) if i < self.size - 1 else None
-                if rrep is not None:
+                rrep = self.find(i + 1) if i < self.size - 1 else np.nan
+                if not np.isnan(rrep):
                     if abs(rrep - old_root) > thresh:
                         switch_flag += 1
                 else:
                     switch_flag += 1
 
                 if switch_flag == 2:
-                    new_root = self.unite_to_neighbor(i, return_new_root=True)
+                    if np.isnan(lrep) or np.isnan(rrep):
+                        _mp01 = np.nanmean([lrep, rrep])   # type: ignore
+                        nr0 = np.floor(_mp01).astype(int)
+                        nr1 = np.ceil(_mp01).astype(int)
+                        new_root, _ = self._prefer(nr0, nr1)
+                    else:
+                        new_root, _ = self._prefer(lrep, rrep)
                     self._reassign_root(old_root, new_root)
 
 
@@ -380,26 +439,16 @@ def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
 
             if visible:
                 constraints_structure.unite(left, right)
-                # constraints_structure.smart_unite(left, right, zar[x, y])
+                # constraints_structure.depth_unite(left, right, zar[x, y])
                 visible_pixels[left] = True
                 visible_pixels[right] = True
 
-    constraints_structure.global_enforce_nearby(1)
-    constraints_structure.global_enforce_nearby(5)
-    constraints_structure.global_enforce_nearby(9)
-    constraints_structure.global_enforce_source()
+    # constraints_structure.global_enforce_nearby(9)
 
     for i in constraints:
-        # if not visible_pixels[i] and ref is not None:
-        #     constraints_structure.unite_to_neighbor(i)
+        if not visible_pixels[i] and ref is not None:
+            constraints_structure.enforce_nearby(i)
         constraints[i] = constraints_structure.find(i)
-
-        # if visible_pixels[i]:
-        #     constraints[i] = constraints_structure.find(i)
-        # else:
-        #     constraints_structure.unite_to_neighbor(i)
-        #     constraints[i] = constraints_structure.find(i)
-        #     # constraints[i] = -99
 
     return constraints
 
