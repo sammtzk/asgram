@@ -468,12 +468,50 @@ def _build_row_vectorized(asg_row, constraints):
     return asg_row
 
 
+def _redmean_color_diff(color1, color2):
+    r1, g1, b1 = color1
+    r2, g2, b2 = color2
+
+    rmean = 0.5 * (r1 + r2)
+    drs = (r1 - r2) ** 2
+    dgs = (g1 - g2) ** 2
+    dbs = (b1 - b2) ** 2
+
+    rw = 2 + rmean / 256
+    gw = 4
+    bw = 2 + (255 - rmean) / 256
+
+    return np.sqrt(rw * drs + gw * dgs + bw * dbs)
+
+
+def _pdvrpp(asg_row):
+    """Pixel Disparity Visual Rectification Post-Processing"""
+
+    corrected_asg_row = asg_row.copy()
+    for inner_idx in np.arange(0 + 1, asg_row.shape[1] - 1):
+        target_pixel = asg_row[:, inner_idx]
+        left_pixel = asg_row[:, inner_idx + 1]
+        right_pixel = asg_row[:, inner_idx - 1]
+
+        left_rmcd = _redmean_color_diff(target_pixel, left_pixel)
+        right_rmcd = _redmean_color_diff(target_pixel, right_pixel)
+
+        if 100 < left_rmcd and right_rmcd < 100:
+            rbar = abs(left_pixel[0] - right_pixel[0])
+            gbar = abs(left_pixel[0] - right_pixel[0])
+            bbar = abs(left_pixel[0] - right_pixel[0])
+            corrected_asg_row[:, target_pixel] = [rbar, gbar, bbar]
+
+    return corrected_asg_row
+
+
 def _asg_row(
     asg, y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'
 ):
     asg_row = asg[:, :, y]
     constraints = _dsdsc(y, zar, ref, mu, dpi, cross_eyed, approach)
-    return _build_row_vectorized(asg_row, constraints)
+    asg_row = _build_row_vectorized(asg_row, constraints)
+    return _pdvrpp(asg_row)
 
 
 def _conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
