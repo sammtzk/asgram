@@ -5,7 +5,6 @@ params data class.
 """
 
 import numpy as np
-import cv2 as cv
 from matplotlib import colormaps
 try:
     from asgram.tiw import _do_work, _separation
@@ -16,74 +15,6 @@ except ModuleNotFoundError:
 def _pixel_separation(Z, mu=1/3, dpi=72, cross_eyed=False):
     Z = -Z + 1.0 if cross_eyed else Z
     return _separation(Z=Z, mu=mu, dpi=dpi)
-
-
-def _resize_img(_img, mult=1.0):
-    if 0.0 < mult and 1.0 != mult:
-        _img = _img.resize([int(round(n * np.sqrt(mult))) for n in _img.size])
-    return _img
-
-
-def _kitsch_smooth_img_array(_arr, mu=1/3, dpi=72, smoothing_amt=0):
-    if smoothing_amt > 0:
-        far = _pixel_separation(0, mu, dpi, cross_eyed=False)
-        near = _pixel_separation(1, mu, dpi, cross_eyed=False)
-        detail = np.ceil(255 / (far - near))
-
-        ls_arr = np.roll(_arr, shift=-1, axis=0)
-        rs_arr = np.roll(_arr, shift=1, axis=0)
-
-        rmask = np.abs(_arr - rs_arr) < detail
-        lmask = np.abs(_arr - ls_arr) < detail
-
-        mask = rmask | lmask
-        ls_amt = -int(round(smoothing_amt / 2))
-        rs_amt = ls_amt + smoothing_amt
-        for i in range(abs(ls_amt)):
-            mask = mask & np.roll(mask, shift=-(i + 1), axis=0)
-        for i in range(abs(rs_amt)):
-            mask = mask & np.roll(mask, shift=(i + 1), axis=0)
-
-        # pylint: disable=no-member
-        hsmooth = cv.GaussianBlur(_arr, (1, smoothing_amt), 0)
-        _arr[mask] = hsmooth[mask]
-
-    return _arr
-
-
-def _smooth_img_array(_arr):
-    # pylint: disable=no-member
-    return cv.bilateralFilter(_arr, 9, 75, 75)
-
-
-def _invert_img_array(_arr):
-    return ((_arr.astype('int16') - 255) * -1).astype('uint8')
-
-
-def _normalize_img_array(_arr, normalize):
-    _arr = np.array(_arr, dtype=np.float32)
-    if not normalize:
-        return _arr / 255
-    return (_arr - np.min(_arr)) / (np.max(_arr) - np.min(_arr))
-
-
-def _pad_img_array(_arr, mu=1/3, dpi=72):
-    far = _pixel_separation(0, mu, dpi, cross_eyed=False)
-    l_pad = np.repeat(_arr[0:1, :], far, axis=0)
-    r_pad = np.repeat(_arr[-1:, :], far, axis=0)
-    return np.vstack((l_pad, _arr, r_pad))
-
-
-def _prepare_z_arr(
-    img, mu=1/3, dpi=72,
-    normalize=True, invert=False, smooth=False, pad=False, scale=1.0
-):
-    zar = np.array(_resize_img(img.copy().convert('L'), scale)).T
-    zar = _invert_img_array(zar) if invert else zar
-    zar = _normalize_img_array(zar, normalize)
-    zar = _smooth_img_array(zar) if smooth else zar
-    zar = _pad_img_array(zar, mu, dpi) if pad else zar
-    return zar
 
 
 def _color_palette_maker(palette='bw'):
@@ -469,8 +400,8 @@ def _build_row_vectorized(asg_row, constraints):
 
 
 def _redmean_color_diff(color1, color2):
-    r1, g1, b1 = color1
-    r2, g2, b2 = color2
+    r1, g1, b1 = color1.astype(float)
+    r2, g2, b2 = color2.astype(float)
 
     rmean = 0.5 * (r1 + r2)
     drs = (r1 - r2) ** 2
@@ -484,25 +415,24 @@ def _redmean_color_diff(color1, color2):
     return np.sqrt(rw * drs + gw * dgs + bw * dbs)
 
 
-def _pdvrpp(asg_row):
+def _pdvrpp(asg_row, thresh=25):
     """Pixel Disparity Visual Rectification Post-Processing"""
 
-    corrected_asg_row = asg_row.copy()
     for inner_idx in np.arange(0 + 1, asg_row.shape[1] - 1):
-        target_pixel = asg_row[:, inner_idx]
-        left_pixel = asg_row[:, inner_idx + 1]
-        right_pixel = asg_row[:, inner_idx - 1]
+        target_pixel = asg_row[:, inner_idx].astype(float)
+        left_pixel = asg_row[:, inner_idx + 1].astype(float)
+        right_pixel = asg_row[:, inner_idx - 1].astype(float)
 
         left_rmcd = _redmean_color_diff(target_pixel, left_pixel)
         right_rmcd = _redmean_color_diff(target_pixel, right_pixel)
 
-        if 100 < left_rmcd and right_rmcd < 100:
-            rbar = abs(left_pixel[0] - right_pixel[0])
-            gbar = abs(left_pixel[0] - right_pixel[0])
-            bbar = abs(left_pixel[0] - right_pixel[0])
-            corrected_asg_row[:, target_pixel] = [rbar, gbar, bbar]
+        if thresh < left_rmcd and thresh < right_rmcd:
+            rbar = int(round((left_pixel[0] + right_pixel[0]) / 2))
+            gbar = int(round((left_pixel[1] + right_pixel[1]) / 2))
+            bbar = int(round((left_pixel[2] + right_pixel[2]) / 2))
+            asg_row[:, inner_idx] = [rbar, gbar, bbar]
 
-    return corrected_asg_row
+    return asg_row
 
 
 def _asg_row(

@@ -7,8 +7,9 @@ from PIL import Image
 import numpy as np
 try:
     from asgram.utils import (
-        _prepare_z_arr, _pixel_separation, _sirds_init, _asg_row, _conv_dots
+        _pixel_separation, _sirds_init, _asg_row, _conv_dots
     )
+    from asgram.depth_map_making import ZMap
     from asgram.parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
@@ -16,8 +17,9 @@ try:
     from asgram.parallelize.gradio_process import set_processes, executor_runs
 except ModuleNotFoundError:
     from utils import (
-        _prepare_z_arr, _pixel_separation, _sirds_init, _asg_row, _conv_dots
+        _pixel_separation, _sirds_init, _asg_row, _conv_dots
     )
+    from depth_map_making import ZMap
     from parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
@@ -77,7 +79,8 @@ def sirds(
     will draw at the near plane. Values outside of [0, 1] will not draw.
     """
     np.random.seed(random_seed)
-    zar = _prepare_z_arr(img, mu, dpi, normalize, invert, smooth, pad, scale)
+    _zmap = ZMap(img, mu, dpi, scale, smooth, smooth, invert, normalize, pad)
+    zar = _zmap.zarr
     asg = _sirds_init(zar, ref_img, ref_fit, mu, dpi, approach, palette)
 
     jobs = determine_processes(num_jobs)
@@ -121,7 +124,8 @@ async def sirds_async(
     will draw at the near plane. Values outside of [0, 1] will not draw.
     """
     np.random.seed(random_seed)
-    zar = _prepare_z_arr(img, mu, dpi, normalize, invert, smooth, pad, scale)
+    _zmap = ZMap(img, mu, dpi, scale, smooth, smooth, invert, normalize, pad)
+    zar = _zmap.zarr
     asg = _sirds_init(zar, ref_img, ref_fit, mu, dpi, approach, palette)
 
     jobs = set_processes(num_jobs, concurrency_limit)
