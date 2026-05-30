@@ -6,18 +6,14 @@ Functions for making polished single image stereograms.
 from PIL import Image
 import numpy as np
 try:
-    from asgram.utils import (
-        _pixel_separation, _sirds_init, _asg_row, _conv_dots
-    )
+    from asgram.utils import _sirds_init, _asg_row, _conv_dots
     from asgram.depth_map_making import ZMap
     from asgram.parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
     )
 except ModuleNotFoundError:
-    from utils import (
-        _pixel_separation, _sirds_init, _asg_row, _conv_dots
-    )
+    from utils import _sirds_init, _asg_row, _conv_dots
     from depth_map_making import ZMap
     from parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,

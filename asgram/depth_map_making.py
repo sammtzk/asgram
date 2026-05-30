@@ -32,7 +32,12 @@ def _normalize_img_array(_arr, normalize):
     _arr = np.array(_arr, dtype=np.float32)
     if not normalize:
         return _arr / 255
-    return (_arr - np.min(_arr)) / (np.max(_arr) - np.min(_arr))
+    max_val = np.max(_arr)
+    if 0 < max_val:
+        min_val = np.min(_arr)
+        return (_arr - min_val) / (max_val - min_val)
+    else:
+        return _arr / 255
 
 
 def _pad_img_array(_arr, mu=1/3, dpi=72):

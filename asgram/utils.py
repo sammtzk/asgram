@@ -441,7 +441,7 @@ def _asg_row(
     asg_row = asg[:, :, y]
     constraints = _dsdsc(y, zar, ref, mu, dpi, cross_eyed, approach)
     asg_row = _build_row_vectorized(asg_row, constraints)
-    return _pdvrpp(asg_row)
+    return _pdvrpp(asg_row) if ref is not None else asg_row
 
 
 def _conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
