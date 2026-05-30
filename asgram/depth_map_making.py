@@ -53,7 +53,6 @@ def _row_linearization_smoothing(_arr, thresh=0.64, min_win=9, min_lap=3):
     Identifies approximately linear segments within an array and increases the
     granularity of the linear step.
     """
-
     mxb = _arr.copy()
     length = mxb.shape[0]
     index_arr = np.linspace(0, 1, length)
@@ -133,7 +132,6 @@ def _linear_segment_smoothing(_arr, num_jobs=-1):
     Identifies approximately linear segments and increases the granularity of
     the linear step within each row of a depth array.
     """
-
     jobs = determine_processes(num_jobs)
     if 1 < jobs:
         chunks = np.array_split(list(range(_arr.shape[1])), jobs)
@@ -154,7 +152,6 @@ def integrated_image_smoothing(_img):
     Smooths an image row-wise using linearization smoothing while preserving
     edges using edge detection and bilateral filtering.
     """
-
     hblur_arr = cv.GaussianBlur(np.array(_img.convert('L')).T, (1, 3), 0)
     hblur_img = Image.fromarray(hblur_arr.T)
 
@@ -210,7 +207,6 @@ class ZMap:
     """
     Stores and augments depth maps using PIL and NumPy methods.
     """
-
     def __init__(
             self, img, mu=1/3, dpi=72,
             scale=1.0, smooth_iis=False, smooth_bilat=False,
