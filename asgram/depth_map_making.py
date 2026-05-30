@@ -8,8 +8,16 @@ import numpy as np
 import cv2 as cv
 try:
     from asgram.tiw import _separation
+    from asgram.parallelize.local_process import (
+        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
+        determine_processes, pool_runs
+    )
 except ModuleNotFoundError:
     from tiw import _separation
+    from parallelize.local_process import (
+        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
+        determine_processes, pool_runs
+    )
 
 
 # PIL Methods Integration
@@ -97,14 +105,42 @@ def _row_linearization_smoothing(_arr, thresh=0.64, min_win=9, min_lap=3):
     return mxb
 
 
-def _linear_segment_smoothing(_arr):
+def _lss_worker(args):
+    pull_from, ys_to_build = args
+    _arr = np.zeros_like(pull_from)
+    total = len(ys_to_build)
+    prog = int(np.ceil(total / UPDATE_COUNTER))
+
+    for i, y in enumerate(ys_to_build):
+        _arr[:, y] = _row_linearization_smoothing(pull_from[:, y])
+
+        if STOP_EARLY.is_set():
+            break
+        elif (i + 1) % prog == 0 or i + 1 == total:
+            with LOCK:
+                COUNTER.value += prog if (i + 1) % prog == 0 else total % prog
+
+    return _arr
+
+
+def _linear_segment_smoothing(_arr, num_jobs=8):
     """
     Identifies approximately linear segments and increases the granularity of
     the linear step within each row of a depth array.
     """
 
-    for y in range(_arr.shape[1]):
-        _arr[:, y] = _row_linearization_smoothing(_arr[:, y], 0.7, 5, 4)
+    jobs = determine_processes(num_jobs)
+    if 1 < jobs:
+        chunks = np.array_split(list(range(_arr.shape[1])), jobs)
+        _args = [(_arr, c) for c in chunks]
+        results = pool_runs(_lss_worker, _args, _arr.shape[1], jobs)
+        _arr = np.zeros_like(_arr)
+        for r in results:
+            _arr += r
+    else:
+        for y in range(_arr.shape[1]):
+            _arr[:, y] = _row_linearization_smoothing(_arr[:, y])
+
     return _arr
 
 
@@ -193,8 +229,9 @@ class ZMap:
 
     def update(self):
         """Updates the depth map image according to class parameters."""
-        zmap = _resize_img(self.og_img.copy().convert('L'), self.scale)
+        zmap = self.og_img.copy().convert('L')
         zmap = integrated_image_smoothing(zmap) if self.iis else zmap
+        zmap = _resize_img(zmap, self.scale)
         zmap = ImageChops.invert(zmap) if self.invert else zmap
 
         zarr = np.array(zmap).T
