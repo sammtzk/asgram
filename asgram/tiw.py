@@ -3,7 +3,7 @@
 Constraint Satisfaction Algorithm for Stereogram Generation.
 
 Provides tools to create Single Image Random Dot Stereograms (SIRDS).
-Module named after Thimbleby, Inglis, & Witten (TIW).
+Module named after Thimbleby, Inglis, & Witten (TIW), and is self-contained.
 
 References
 ----------
@@ -11,7 +11,6 @@ References
     Displaying 3D Images: Algorithms for Single Image Random Dot Stereograms.
     IEEE Computer. 27. 38-48. 10.1109/2.318576.
 """
-
 
 from PIL import Image
 import numpy as np
