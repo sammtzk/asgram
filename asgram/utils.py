@@ -445,12 +445,14 @@ def _asg_row(
 
 
 def _conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
-    w, h = asg.shape[1:]
-    s_pixels = asg.reshape(3, -1)
-    colors, counts = np.unique(s_pixels, axis=1, return_counts=True)
-    dot_color = colors[:, np.argmin(counts)]
-
     if 0 <= depth <= 1:
+        w, h = asg.shape[1:]
+        all_pixels = asg.reshape(3, -1).T
+        np.random.shuffle(all_pixels)
+        s_pixels = all_pixels[:100].T
+        colors, counts = np.unique(s_pixels, axis=1, return_counts=True)
+        dot_color = colors[:, np.argmin(counts)]
+
         how_far = _pixel_separation(depth, mu, dpi, cross_eyed)
         dot_r2 = (np.hypot(w, h) / 100) ** 2
 
