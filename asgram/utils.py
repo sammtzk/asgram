@@ -1,4 +1,4 @@
-# sgram/utils.py
+# asgram/utils.py
 """
 Utility functions for the creation of autostereograms. I should make an asg
 params data class.

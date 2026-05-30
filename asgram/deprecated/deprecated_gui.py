@@ -1,4 +1,4 @@
-# sgram/gui.py
+# asgram/gui.py
 """
 gooey. want to specify png output with a path.
 """

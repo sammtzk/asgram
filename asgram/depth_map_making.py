@@ -1,4 +1,4 @@
-# sgram/depth_map_making.py
+# asgram/depth_map_making.py
 """
 Functions for cleaning up, standardizing, and rescaling depth maps.
 """
@@ -123,7 +123,7 @@ def _lss_worker(args):
     return _arr
 
 
-def _linear_segment_smoothing(_arr, num_jobs=8):
+def _linear_segment_smoothing(_arr, num_jobs=-1):
     """
     Identifies approximately linear segments and increases the granularity of
     the linear step within each row of a depth array.

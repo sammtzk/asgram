@@ -1,4 +1,4 @@
-# sgram/parallelize/local_process.py
+# asgram/parallelize/local_process.py
 """
 Functions for parallelizing work in sgram using multiprocessing. Designed to be
 used locally within notebooks for quick stereogram generation for example.
