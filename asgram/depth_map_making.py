@@ -204,9 +204,8 @@ def _deprecated_smooth_img_array(_arr, mu=1/3, dpi=72, smoothing_amt=0):
 
 # Object Maker
 class ZMap:
-    """
-    Stores and augments depth maps using PIL and NumPy methods.
-    """
+    """ Stores and augments depth maps using PIL and NumPy methods."""
+
     def __init__(
             self, img, mu=1/3, dpi=72,
             scale=1.0, smooth_iis=False, smooth_bilat=False,
@@ -224,12 +223,13 @@ class ZMap:
         self.normalize = normalize
         self.pad = pad
 
-        self.zarr = np.array([])
-        self.zmap = np.array([])
+        self.zm_arr = np.array([])
+        self.zm_img = np.array([])
         self.update()
 
     def update(self):
         """Updates the depth map image according to class parameters."""
+        print("Step: Depth Map Making")
         zmap = self.og_img.copy().convert('L')
         zmap = integrated_image_smoothing(zmap) if self.iis else zmap
         zmap = _resize_img(zmap, self.scale)
@@ -240,5 +240,6 @@ class ZMap:
         zarr = _normalize_img_array(zarr, self.normalize)
         zarr = _pad_img_array(zarr, self.mu, self.dpi) if self.pad else zarr
 
-        self.zarr = zarr
-        self.zmap = Image.fromarray(zarr.T * 255)
+        self.zm_arr = zarr
+        self.zm_img = Image.fromarray(zarr.T * 255)
+        print("Complete.")

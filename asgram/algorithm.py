@@ -270,7 +270,7 @@ class DisjointSet:
                     self._reassign_root(old_root, new_root)
 
 
-def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
+def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     """Disjoint Set Data Structure Constrain"""
     w = zar.shape[0]
     eye_scalar = round(2.5 * dpi)
@@ -300,7 +300,7 @@ def _dsdsc(y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     # constraints_structure.global_enforce_nearby(9)
 
     for i in constraints:
-        if not visible_pixels[i] and ref is not None:
+        if not visible_pixels[i] and _re:
             constraints_structure.enforce_nearby(i)
         constraints[i] = constraints_structure.find(i)
 
@@ -358,12 +358,12 @@ def _pdvrpp(asg_row, thresh=25):
 
 
 def _asg_row(
-    asg, y, zar, ref=None, mu=1/3, dpi=72, cross_eyed=False, approach='rl'
+    asg, y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'
 ):
     asg_row = asg[:, :, y]
-    constraints = _dsdsc(y, zar, ref, mu, dpi, cross_eyed, approach)
+    constraints = _dsdsc(y, zar, _re, mu, dpi, cross_eyed, approach)
     asg_row = _build_row_vectorized(asg_row, constraints)
-    return _pdvrpp(asg_row) if ref is not None else asg_row
+    return _pdvrpp(asg_row) if _re else asg_row
 
 
 def _conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):

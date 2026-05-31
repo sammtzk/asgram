@@ -8,7 +8,7 @@ import numpy as np
 try:
     from asgram.algorithm import _asg_row, _conv_dots
     from asgram.depth_map_making import ZMap
-    from asgram.source_pattern_making import _sirds_init
+    from asgram.source_pattern_making import SourcePattern
     from asgram.parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
@@ -16,7 +16,7 @@ try:
 except ModuleNotFoundError:
     from algorithm import _asg_row, _conv_dots
     from depth_map_making import ZMap
-    from source_pattern_making import _sirds_init
+    from source_pattern_making import SourcePattern
     from parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
@@ -24,14 +24,14 @@ except ModuleNotFoundError:
 
 
 def _p_worker(args):
-    pull_from, zar, ref, mu, dpi, cross, approach, ys_to_build = args
+    pull_from, zar, _re, mu, dpi, cross, approach, ys_to_build = args
     asg = np.zeros_like(pull_from)
     total = len(ys_to_build)
     prog = int(np.ceil(total / UPDATE_COUNTER))
 
     for i, y in enumerate(ys_to_build):
         asg[:, :, y] = _asg_row(
-            pull_from, y, zar, ref, mu, dpi, cross, approach
+            pull_from, y, zar, _re, mu, dpi, cross, approach
         )
 
         if STOP_EARLY.is_set():
@@ -44,7 +44,7 @@ def _p_worker(args):
 
 
 def asgram(
-    img, ref_img=None, ref_fit='fit',
+    img, ref=None, ref_fit='fit',
     mu=1/3, dpi=72, cross=False, approach='rl',
     normalize=True, invert=False, smooth=False, pad=False, scale=1.0,
     palette='bw',
@@ -63,14 +63,17 @@ def asgram(
     """
     np.random.seed(random_seed)
     _zmap = ZMap(img, mu, dpi, scale, smooth, smooth, invert, normalize, pad)
-    zar = _zmap.zarr
-    asg = _sirds_init(zar, cross, ref_img, ref_fit, mu, dpi, approach, palette)
+    zar = _zmap.zm_arr
+    size = zar.shape
+    _re = ref is not None
+    _sp = SourcePattern(size, ref, cross, mu, dpi, ref_fit, approach, palette)
+    asg = _sp.sp_arr
 
     jobs = determine_processes(num_jobs)
     if 1 < jobs:
         chunks = np.array_split(list(range(zar.shape[1])), jobs)
         _args = [
-            (asg, zar, ref_img, mu, dpi, cross, approach, c)
+            (asg, zar, _re, mu, dpi, cross, approach, c)
             for c in chunks
         ]
         results = pool_runs(_p_worker, _args, zar.shape[1], jobs)
@@ -80,7 +83,7 @@ def asgram(
     else:
         for y in range(zar.shape[1]):
             asg[:, :, y] = _asg_row(
-                asg, y, zar, ref_img, mu, dpi, cross, approach
+                asg, y, zar, _re, mu, dpi, cross, approach
             )
 
     asg = _conv_dots(asg, dot_depth, dot_height, mu, dpi, cross)
