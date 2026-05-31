@@ -6,17 +6,19 @@ Functions for making polished single image stereograms.
 from PIL import Image
 import numpy as np
 try:
-    from asgram.algorithm import _asg_row, _conv_dots
+    from asgram.algorithm import _asg_row
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SourcePattern
+    from asgram.postprocessing import conv_dots
     from asgram.parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
     )
 except ModuleNotFoundError:
-    from algorithm import _asg_row, _conv_dots
+    from algorithm import _asg_row
     from depth_map_making import ZMap
     from source_pattern_making import SourcePattern
+    from postprocessing import conv_dots
     from parallelize.local_process import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
@@ -57,9 +59,6 @@ def asgram(
 
     Original Single Image Random Dot Stereogram algorithm described by
     Thimbleby, Inglis, & Witten (1994), adapted to Python.
-
-    By default draws dots at the far plane. A depth value of 1
-    will draw at the near plane. Values outside of [0, 1] will not draw.
     """
     np.random.seed(random_seed)
     _zmap = ZMap(img, mu, dpi, scale, smooth, smooth, invert, normalize, pad)
@@ -86,6 +85,6 @@ def asgram(
                 asg, y, zar, _re, mu, dpi, cross, approach
             )
 
-    asg = _conv_dots(asg, dot_depth, dot_height, mu, dpi, cross)
+    asg = conv_dots(asg, dot_depth, dot_height, mu, dpi, cross)
 
     return Image.fromarray(asg.T)
