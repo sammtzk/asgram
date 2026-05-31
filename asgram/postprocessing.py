@@ -6,8 +6,16 @@ Functions for cleaning up autostereograms and adding convergence helpers.
 import numpy as np
 try:
     from asgram.algorithm import _pixel_separation
+    from asgram.parallelize.local_process import (
+        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
+        determine_processes, pool_runs
+    )
 except ModuleNotFoundError:
     from algorithm import _pixel_separation
+    from parallelize.local_process import (
+        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
+        determine_processes, pool_runs
+    )
 
 
 def _redmean_color_diff(color1, color2):
@@ -26,7 +34,7 @@ def _redmean_color_diff(color1, color2):
     return np.sqrt(rw * drs + gw * dgs + bw * dbs)
 
 
-def pdvrpp(asg_row, thresh=25):
+def _row_pdvrpp(asg_row, thresh=25):
     """Pixel Disparity Visual Rectification Post-Processing"""
     for inner_idx in np.arange(0 + 1, asg_row.shape[1] - 1):
         target_pixel = asg_row[:, inner_idx].astype(float)
@@ -43,6 +51,41 @@ def pdvrpp(asg_row, thresh=25):
             asg_row[:, inner_idx] = [rbar, gbar, bbar]
 
     return asg_row
+
+
+def _pdvrpp_worker(args):
+    pull_from, thresh, ys_to_build = args
+    _arr = np.zeros_like(pull_from)
+    total = len(ys_to_build)
+    prog = int(np.ceil(total / UPDATE_COUNTER))
+
+    for i, y in enumerate(ys_to_build):
+        _arr[:, :, y] = _row_pdvrpp(pull_from[:, :, y], thresh)
+
+        if STOP_EARLY.is_set():
+            break
+        elif (i + 1) % prog == 0 or i + 1 == total:
+            with LOCK:
+                COUNTER.value += prog if (i + 1) % prog == 0 else total % prog
+
+    return _arr
+
+
+def pdvrpp(asg, thresh=25, num_jobs=-1):
+    """Pixel Disparity Visual Rectification Post-Processing"""
+    jobs = determine_processes(num_jobs)
+    if 1 < jobs:
+        chunks = np.array_split(list(range(asg.shape[2])), jobs)
+        _args = [(asg, thresh, c) for c in chunks]
+        results = pool_runs(_pdvrpp_worker, _args, asg.shape[2], jobs)
+        asg = np.zeros_like(asg)
+        for r in results:
+            asg += r
+    else:
+        for y in range(asg.shape[2]):
+            asg[:, :, y] = _row_pdvrpp(asg[:, :, y], thresh)
+
+    return asg
 
 
 def conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
@@ -81,4 +124,17 @@ def conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
 
         asg[:, mask] = dot_color[:, None]
 
+    return asg
+
+
+def finish(
+        asg,
+        depth, height='bottom', mu=1/3, dpi=72, cross=False,
+        pdvrs=False, num_jobs=-1
+):
+    """Combines module postprocessing helpers into one function."""
+    print("Step: Postprocessing")
+    asg = pdvrpp(asg, num_jobs=num_jobs) if pdvrs else asg
+    asg = conv_dots(asg, depth, height, mu, dpi, cross)
+    print("Complete.")
     return asg

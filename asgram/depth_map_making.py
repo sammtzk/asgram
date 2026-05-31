@@ -48,7 +48,7 @@ def _pad_img_array(_arr, mu=1/3, dpi=72):
 
 
 # Image Smoothing
-def _row_linearization_smoothing(_arr, thresh=0.64, min_win=9, min_lap=3):
+def _row_linearization_smooth(_arr, thresh=0.64, min_win=9, min_lap=3):
     """
     Identifies approximately linear segments within an array and increases the
     granularity of the linear step.
@@ -116,7 +116,7 @@ def _lss_worker(args):
     prog = int(np.ceil(total / UPDATE_COUNTER))
 
     for i, y in enumerate(ys_to_build):
-        _arr[:, y] = _row_linearization_smoothing(pull_from[:, y])
+        _arr[:, y] = _row_linearization_smooth(pull_from[:, y])
 
         if STOP_EARLY.is_set():
             break
@@ -127,7 +127,7 @@ def _lss_worker(args):
     return _arr
 
 
-def _linear_segment_smoothing(_arr, num_jobs=-1):
+def _linear_segment_smooth(_arr, num_jobs=-1):
     """
     Identifies approximately linear segments and increases the granularity of
     the linear step within each row of a depth array.
@@ -142,12 +142,12 @@ def _linear_segment_smoothing(_arr, num_jobs=-1):
             _arr += r
     else:
         for y in range(_arr.shape[1]):
-            _arr[:, y] = _row_linearization_smoothing(_arr[:, y])
+            _arr[:, y] = _row_linearization_smooth(_arr[:, y])
 
     return _arr
 
 
-def integrated_image_smoothing(_img):
+def integrated_img_smooth(_img, num_jobs=-1):
     """
     Smooths an image row-wise using linearization smoothing while preserving
     edges using edge detection and bilateral filtering.
@@ -167,7 +167,7 @@ def integrated_image_smoothing(_img):
 
     static_mask = Image.fromarray(_mask.T)
 
-    lss_img = Image.fromarray(_linear_segment_smoothing(hblur_arr).T)
+    lss_img = Image.fromarray(_linear_segment_smooth(hblur_arr, num_jobs).T)
 
     edges_only = ImageChops.multiply(hblur_img, static_mask)
     lss_only = ImageChops.multiply(lss_img, ImageChops.invert(static_mask))
@@ -176,6 +176,7 @@ def integrated_image_smoothing(_img):
 
 
 def _deprecated_smooth_img_array(_arr, mu=1/3, dpi=72, smoothing_amt=0):
+    """Deprecateed."""
     if smoothing_amt > 0:
         far = _separation(0, mu, dpi)
         near = _separation(1, mu, dpi)
@@ -208,21 +209,25 @@ class ZMap:
 
     def __init__(
             self, img, mu=1/3, dpi=72,
-            scale=1.0, smooth_iis=False, smooth_bilat=False,
-            invert=False, normalize=True, pad=False
+            scale=1.0, iis=False, bil=False,
+            invert=False, normalize=True, pad=False,
+            num_jobs=-1
     ):
-        self.og_img = img
+        self.img = img
         self.mu = mu
         self.dpi = dpi
 
         self.scale = scale
-        self.iis = smooth_iis
-        self.bilat = smooth_bilat
+        self.iis = iis
+        self.bil = bil
 
         self.invert = invert
         self.normalize = normalize
         self.pad = pad
 
+        self.num_jobs = num_jobs
+
+        self.size = (0, 0)
         self.zm_arr = np.array([])
         self.zm_img = np.array([])
         self.update()
@@ -230,16 +235,17 @@ class ZMap:
     def update(self):
         """Updates the depth map image according to class parameters."""
         print("Step: Depth Map Making")
-        zmap = self.og_img.copy().convert('L')
-        zmap = integrated_image_smoothing(zmap) if self.iis else zmap
+        zmap = self.img.copy().convert('L')
+        zmap = integrated_img_smooth(zmap, self.num_jobs) if self.iis else zmap
         zmap = _resize_img(zmap, self.scale)
         zmap = ImageChops.invert(zmap) if self.invert else zmap
 
         zarr = np.array(zmap).T
-        zarr = cv.bilateralFilter(zarr, 9, 75, 75) if self.bilat else zarr
+        zarr = cv.bilateralFilter(zarr, 9, 75, 75) if self.bil else zarr
         zarr = _normalize_img_array(zarr, self.normalize)
         zarr = _pad_img_array(zarr, self.mu, self.dpi) if self.pad else zarr
 
+        self.size = zarr.shape
         self.zm_arr = zarr
         self.zm_img = Image.fromarray(zarr.T * 255)
         print("Complete.")

@@ -121,16 +121,16 @@ def _color_palette_maker(palette='bw'):
 
 
 # Object Maker
-class SourcePattern:
+class SrcPat:
     """Stores and augments source patterns for autostereograms."""
 
     def __init__(
             self, size, ref=None, cross_eyed=False,
             mu=1/3, dpi=72, fit='fit', approach='rl',
-            palette='bw'
+            random_palette='bw'
     ):
         self.size = size
-        self.og_ref = ref
+        self.ref = ref
         self.cross_eyed = cross_eyed
 
         self.mu = mu
@@ -138,7 +138,7 @@ class SourcePattern:
         self.fit = fit
         self.approach = approach
 
-        self.palette = palette
+        self.random_palette = random_palette
 
         self.sp_arr = np.array([])
         self.sp_img = np.array([])
@@ -147,8 +147,8 @@ class SourcePattern:
     def update(self):
         """Updates the source pattern according to class parameters."""
         print("Step: Source Pattern Making")
-        if self.og_ref is not None:
-            asg = self.og_ref.copy()
+        if self.ref is not None:
+            asg = self.ref.copy()
             w, h = self.size
             rep_len = _pixel_separation(0, self.mu, self.dpi, self.cross_eyed)
 
@@ -162,7 +162,7 @@ class SourcePattern:
             asg = source_crop(asg, w, h, self.approach)
 
         else:
-            _col_pal = _color_palette_maker(self.palette)
+            _col_pal = _color_palette_maker(self.random_palette)
             asg = np.array(
                 _col_pal[np.random.randint(len(_col_pal), size=self.size)],
                 dtype=np.uint8
