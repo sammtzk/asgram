@@ -229,7 +229,7 @@ class ZMap:
 
         self.size = (0, 0)
         self.zm_arr = np.array([])
-        self.zm_img = np.array([])
+        self.zm_img = Image.new('1', (0, 0))
         self.update()
 
     def update(self):

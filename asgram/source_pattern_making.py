@@ -141,7 +141,7 @@ class SrcPat:
         self.random_palette = random_palette
 
         self.sp_arr = np.array([])
-        self.sp_img = np.array([])
+        self.sp_img = Image.new('1', (0, 0))
         self.update()
 
     def update(self):

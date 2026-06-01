@@ -1,7 +1,6 @@
 # asgram/algorithm.py
 """
-Utility functions for the creation of autostereograms. I should make an asg
-params data class.
+Utility functions for the creation of autostereograms.
 """
 
 import numpy as np
