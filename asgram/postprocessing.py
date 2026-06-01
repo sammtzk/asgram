@@ -3,6 +3,7 @@
 Functions for cleaning up autostereograms and adding convergence helpers.
 """
 
+import copy
 import numpy as np
 try:
     from asgram.algorithm import _pixel_separation
@@ -94,8 +95,9 @@ def conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
     near plane. Values outside of [0, 1] will not draw.
     """
     if 0 <= depth <= 1:
-        w, h = asg.shape[1:]
-        all_pixels = asg.reshape(3, -1).T
+        sampling_arr = copy.deepcopy(asg)
+        w, h = sampling_arr.shape[1:]
+        all_pixels = sampling_arr.reshape(3, -1).T
         np.random.shuffle(all_pixels)
         s_pixels = all_pixels[:100].T
         colors, counts = np.unique(s_pixels, axis=1, return_counts=True)
