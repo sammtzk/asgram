@@ -14,4 +14,4 @@ dependencies:
   - pip
   - pip:
     - gradio
-    - opencv-python
+    - opencv-contrib-python
