@@ -28,7 +28,7 @@ def _resize_img(_img, mult=1.0):
 
 
 # NumPy Methods Integration
-def _normalize_img_array(_arr, normalize):
+def _normalize_img_array(_arr, normalize=True):
     _arr = np.array(_arr, dtype=np.float32)
     if not normalize:
         return _arr / 255
