@@ -42,6 +42,7 @@ def _rotf(whole, part):
 
 def asgram_tiler(ref, w, h, repeat_len, fit):
     """Uses reference image to tile asgram source patterns."""
+    w_rep_len = h_rep_len = None
     if any(ch.isnumeric() for ch in fit):
         # expect fit='tile=(w_reps)x(h_reps)'
         try:
