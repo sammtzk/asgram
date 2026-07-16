@@ -64,9 +64,10 @@ def progress_bar(i, total, start_time=time.perf_counter(), length=50):
             sys.stdout.flush()
 
 
-# Multiprocessing
+# Multiprocessing parameters
 UPDATE_COUNTER = 1000
 UPDATE_PROGRESS = 1.0
+
 
 # Shared multiprocessing state, initialized per worker via Pool.initializer
 COUNTER = None

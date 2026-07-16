@@ -117,28 +117,35 @@ def asgram_widgets():
         if img_upload.value != ():
             img = Image.open(BytesIO(img_upload.value[0].content))
             nonlocal _zmap
-            _zmap = ZMap(
-                img,
-                mu.value,
-                dpi.value,
-                scale.value,
-                iis.value,
-                bil.value,
-                invert.value,
-                normalize.value,
-                pad.value,
-                num_jobs.value
-            )
+
+            with zm_output:
+                _zmap = ZMap(
+                    img,
+                    mu.value,
+                    dpi.value,
+                    scale.value,
+                    iis.value,
+                    bil.value,
+                    invert.value,
+                    normalize.value,
+                    pad.value,
+                    num_jobs.value
+                )
+            zm_output.clear_output(wait=True)
+
             _buffer = BytesIO()
             _zmap.zm_img.convert('RGB').save(_buffer, format='PNG')
             with zm_output:
                 display(IPyImage(_buffer.getvalue()))
             if _srcpat is not None:
                 _sp_make_clicked(1)
+
         else:
             with zm_output:
                 print('Please upload a Depth Map.')
+
         zm_output.clear_output(wait=True)
+
     zm_make.on_click(_zm_make_clicked)
 
     dw = VBox([
@@ -187,24 +194,31 @@ def asgram_widgets():
             else:
                 ref = None
             nonlocal _srcpat
-            _srcpat = SrcPat(
-                _zmap.size,
-                ref,
-                cross.value,
-                mu.value,
-                dpi.value,
-                rfit.value,
-                approach.value,
-                rpal.value
-            )
+
+            with sp_output:
+                _srcpat = SrcPat(
+                    _zmap.size,
+                    ref,
+                    cross.value,
+                    mu.value,
+                    dpi.value,
+                    rfit.value,
+                    approach.value,
+                    rpal.value
+                )
+            sp_output.clear_output(wait=True)
+
             _buffer = BytesIO()
             _srcpat.sp_img.convert('RGB').save(_buffer, format='PNG')
             with sp_output:
                 display(IPyImage(_buffer.getvalue()))
+
         else:
             with sp_output:
                 print('Please process Depth Map first for sizing.')
+
         sp_output.clear_output(wait=True)
+
     sp_make.on_click(_sp_make_clicked)
 
     sw = VBox([
@@ -225,26 +239,33 @@ def asgram_widgets():
         _ = b
         if (_zmap is not None) and (_srcpat is not None):
             nonlocal _asg
-            _asg = synthesizer(
-                _zmap,
-                _srcpat,
-                mu.value,
-                dpi.value,
-                cross.value,
-                approach.value,
-                num_jobs.value
-            )
+
+            with asg_output:
+                _asg = synthesizer(
+                    _zmap,
+                    _srcpat,
+                    mu.value,
+                    dpi.value,
+                    cross.value,
+                    approach.value,
+                    num_jobs.value
+                )
+            asg_output.clear_output(wait=True)
+
             _buffer = BytesIO()
             Image.fromarray(_asg.T).convert('RGB').save(_buffer, format='PNG')
             with asg_output:
                 display(IPyImage(_buffer.getvalue()))
+
         else:
             with asg_output:
                 if _zmap is None:
                     print('Please make Depth Map.')
                 if _srcpat is None:
                     print('Please make Source Pattern.')
+
         asg_output.clear_output(wait=True)
+
     asg_make.on_click(_asg_make_clicked)
 
     aw = VBox([
@@ -278,24 +299,31 @@ def asgram_widgets():
         _ = b
         if _asg is not None:
             nonlocal _final
-            _final = Image.fromarray(finish(
-                _asg,
-                dot_depth.value,
-                dot_height.value,
-                mu.value,
-                dpi.value,
-                cross.value,
-                pdvrs.value,
-                num_jobs.value
-            ).T)
+
+            with final_output:
+                _final = Image.fromarray(finish(
+                    _asg,
+                    dot_depth.value,
+                    dot_height.value,
+                    mu.value,
+                    dpi.value,
+                    cross.value,
+                    pdvrs.value,
+                    num_jobs.value
+                ).T)
+            final_output.clear_output(wait=True)
+
             _buffer = BytesIO()
             _final.convert('RGB').save(_buffer, format='PNG')
             with final_output:
                 display(IPyImage(_buffer.getvalue()))
+
         else:
             with final_output:
                 print('Please make Autostereogram.')
+
         final_output.clear_output(wait=True)
+
     final_make.on_click(_final_make_clicked)
 
     pw = VBox([
