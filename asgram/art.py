@@ -10,39 +10,37 @@ try:
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SrcPat
     from asgram.postprocessing import finish
-    from asgram.parallelize.local_process import (
-        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
-        determine_processes, pool_runs
+    from asgram.parallelize.generic import (
+        worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
     from algorithm import _asg_row
     from depth_map_making import ZMap
     from source_pattern_making import SrcPat
     from postprocessing import finish
-    from parallelize.local_process import (
-        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
-        determine_processes, pool_runs
+    from parallelize.generic import (
+        worker_count, run_worker, parallelize_workers
     )
 
 
-def _asgram_row_worker(args):
-    pull_from, zar, _re, mu, dpi, cross, approach, ys_to_build = args
-    asg = np.zeros_like(pull_from)
-    total = len(ys_to_build)
-    prog = int(np.ceil(total / UPDATE_COUNTER))
+def _synth_worker(_args):
+    """Worker for synthesizer parallelization. Wraps generic run_worker."""
+    ys_to_build, args_dict = _args
 
-    for i, y in enumerate(ys_to_build):
-        asg[:, :, y] = _asg_row(
-            pull_from, y, zar, _re, mu, dpi, cross, approach
+    def _row_func_wrapper(y, ad=args_dict):
+        """Wrapper for _asg_row."""
+        return _asg_row(
+            asg=ad["src_mat"],
+            y=y,
+            zar=ad["zar"],
+            _re=ad["_re"],
+            mu=ad["mu"],
+            dpi=ad["dpi"],
+            cross_eyed=ad["cross"],
+            approach=ad["approach"]
         )
 
-        if STOP_EARLY.is_set():
-            break
-        elif (i + 1) % prog == 0 or i + 1 == total:
-            with LOCK:
-                COUNTER.value += prog if (i + 1) % prog == 0 else total % prog
-
-    return asg
+    return run_worker(ys_to_build, args_dict, _row_func_wrapper, dim=3)
 
 
 def synthesizer(
@@ -56,17 +54,23 @@ def synthesizer(
     _re = sp.ref is not None
     asg = sp.sp_arr
 
-    jobs = determine_processes(num_jobs)
+    jobs = worker_count(num_jobs)
     if 1 < jobs:
-        chunks = np.array_split(list(range(zar.shape[1])), jobs)
-        _args = [
-            (asg, zar, _re, mu, dpi, cross, approach, c)
-            for c in chunks
-        ]
-        results = pool_runs(_asgram_row_worker, _args, zar.shape[1], jobs)
+        args_dict = {
+            "src_mat": asg,
+            "total_ys": zar.shape[1],
+            "zar": zar,
+            "_re": _re,
+            "mu": mu,
+            "dpi": dpi,
+            "cross": cross,
+            "approach": approach
+        }
+        results = parallelize_workers(args_dict, _synth_worker, jobs)
         asg = np.zeros_like(asg)
         for r in results:
-            asg += r
+            if r is not None:
+                asg += r
     else:
         for y in range(zar.shape[1]):
             asg[:, :, y] = _asg_row(
