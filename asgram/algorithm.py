@@ -21,6 +21,7 @@ class DisjointSet:
         self.size = list_size
         self.far = _pixel_separation(0, mu, dpi, cross_eyed=False)
         self.parent = list(range(self.size))
+        self.constrained = [True] + [False] * (self.size - 2) + [True]
         self.depths = [0.0] * self.size
         self.approach = approach
         self.mp = (self.size - 1) / 2
@@ -79,62 +80,64 @@ class DisjointSet:
 
     def unite(self, idx, jdx):
         """Join values."""
+        self.constrained[idx] = True
+        self.constrained[jdx] = True
         irep, jrep = self.find(idx), self.find(jdx)
         if irep != jrep:
             root, other = self._prefer(irep, jrep)
             self.parent[other] = root
 
-    def depth_unite(self, idx, jdx, source_depth):
-        """Join values."""
-        irep, jrep = self.find(idx), self.find(jdx)
-        self.depths[irep] = max(self.depths[irep], source_depth)
-        self.depths[jrep] = max(self.depths[jrep], source_depth)
+    # def depth_unite(self, idx, jdx, source_depth):
+    #     """Join values."""
+    #     irep, jrep = self.find(idx), self.find(jdx)
+    #     self.depths[irep] = max(self.depths[irep], source_depth)
+    #     self.depths[jrep] = max(self.depths[jrep], source_depth)
+#
+    #     if irep != jrep:
+    #         irep_depth, jrep_depth = self.depths[irep], self.depths[jrep]
+    #         if irep_depth > jrep_depth:
+    #             self.parent[jrep] = irep
+    #         elif irep_depth < jrep_depth:
+    #             self.parent[irep] = jrep
+    #         else:
+    #             root, other = self._prefer(irep, jrep)
+    #             self.parent[other] = root
 
-        if irep != jrep:
-            irep_depth, jrep_depth = self.depths[irep], self.depths[jrep]
-            if irep_depth > jrep_depth:
-                self.parent[jrep] = irep
-            elif irep_depth < jrep_depth:
-                self.parent[irep] = jrep
-            else:
-                root, other = self._prefer(irep, jrep)
-                self.parent[other] = root
-
-    def unite_to_neighbor(self, idx, return_new_root=False):
-        """Join a value to a neighboring root."""
-        left = idx - 1
-        right = idx + 1
-        if 0 <= left:
-            if self.size > right:
-                new_root, _ = self._prefer(self.find(left), self.find(right))
-            else:
-                new_root = self.find(left)
-        else:
-            new_root = self.find(right)
-
-        self.parent[idx] = new_root
-
-        if return_new_root:
-            return new_root
+    # def unite_to_neighbor(self, idx, return_new_root=False):
+    #     """Join a value to a neighboring root."""
+    #     left = idx - 1
+    #     right = idx + 1
+    #     if 0 <= left:
+    #         if self.size > right:
+    #             new_root, _ = self._prefer(self.find(left), self.find(right))
+    #         else:
+    #             new_root = self.find(left)
+    #     else:
+    #         new_root = self.find(right)
+#
+    #     self.parent[idx] = new_root
+#
+    #     if return_new_root:
+    #         return new_root
 
     def _reassign_root(self, old_root, new_root):
         for i in range(self.size):
             if self.parent[i] == old_root:
                 self.parent[i] = new_root
 
-    def enforce_source(self, idx):
-        """Ensure that values have roots from source."""
-        if self.src is not None:
-            old_root = self.parent[idx]
-            if old_root not in self.src:
-                new_root = self.unite_to_neighbor(idx, return_new_root=True)
-                self._reassign_root(old_root, new_root)
+    # def enforce_source(self, idx):
+    #     """Ensure that values have roots from source."""
+    #     if self.src is not None:
+    #         old_root = self.parent[idx]
+    #         if old_root not in self.src:
+    #             new_root = self.unite_to_neighbor(idx, return_new_root=True)
+    #             self._reassign_root(old_root, new_root)
 
-    def global_enforce_source(self):
-        """Ensure that all values have roots from source."""
-        if self.src is not None:
-            for i in range(self.size):
-                self.enforce_source(i)
+    # def global_enforce_source(self):
+    #     """Ensure that all values have roots from source."""
+    #     if self.src is not None:
+    #         for i in range(self.size):
+    #             self.enforce_source(i)
 
     def enforce_nearby(self, idx, thresh=9):
         """Ensure that a pixel draws from similar nearby sources."""
@@ -192,36 +195,78 @@ class DisjointSet:
 
             self._reassign_root(old_root, new_root)
 
-    def global_enforce_nearby(self, thresh=9):
-        """Ensure unconstrained pixels draw from similar nearby sources."""
-        for i in range(self.size):
-            old_root = self.parent[i]
-            if old_root == i:
-                switch_flag = 0
+    # def global_enforce_nearby(self, thresh=9):
+    #     """Ensure unconstrained pixels draw from similar nearby sources."""
+    #     for i in range(self.size):
+    #         old_root = self.parent[i]
+    #         if old_root == i:
+    #             switch_flag = 0
+#
+    #             lrep = self.find(i - 1) if i > 0 else np.nan
+    #             if not np.isnan(lrep):
+    #                 if abs(lrep - old_root) > thresh:
+    #                     switch_flag += 1
+    #             else:
+    #                 switch_flag += 1
+#
+    #             rrep = self.find(i + 1) if i < self.size - 1 else np.nan
+    #             if not np.isnan(rrep):
+    #                 if abs(rrep - old_root) > thresh:
+    #                     switch_flag += 1
+    #             else:
+    #                 switch_flag += 1
+#
+    #             if switch_flag == 2:
+    #                 if np.isnan(lrep) or np.isnan(rrep):
+    #                     _mp01 = np.nanmean([lrep, rrep])   # type: ignore
+    #                     nr0 = np.floor(_mp01).astype(int)
+    #                     nr1 = np.ceil(_mp01).astype(int)
+    #                     new_root, _ = self._prefer(nr0, nr1)
+    #                 else:
+    #                     new_root, _ = self._prefer(lrep, rrep)
+    #                 self._reassign_root(old_root, new_root)
 
-                lrep = self.find(i - 1) if i > 0 else np.nan
-                if not np.isnan(lrep):
-                    if abs(lrep - old_root) > thresh:
-                        switch_flag += 1
-                else:
-                    switch_flag += 1
+    def _linearize(self, start, end, length):
+        """Linear interpolation to apply to unconstrained pixels."""
+        return np.round(np.linspace(start, end, length)).astype(int).tolist()
 
-                rrep = self.find(i + 1) if i < self.size - 1 else np.nan
-                if not np.isnan(rrep):
-                    if abs(rrep - old_root) > thresh:
-                        switch_flag += 1
-                else:
-                    switch_flag += 1
+    def linearize_unconstrained(self, output_arr):
+        """
+        After constraint generation, linearly interpolate unconstrained pixels
+        to ensure smoothness in output.
+        """
+        parents = output_arr.copy()
+        deltas = (np.where(np.diff(self.constrained))[0]).tolist()
+        spans = [(s, e + 2) for s, e in zip(deltas[0::2], deltas[1::2])]
+        for s_idx, e_idx in spans:
+            span = parents[s_idx:e_idx]
+            start, end = span[[0, -1]]
+            interpolation = self._linearize(start, end, len(span))
+            output_arr[s_idx:e_idx] = interpolation
+        return output_arr
 
-                if switch_flag == 2:
-                    if np.isnan(lrep) or np.isnan(rrep):
-                        _mp01 = np.nanmean([lrep, rrep])   # type: ignore
-                        nr0 = np.floor(_mp01).astype(int)
-                        nr1 = np.ceil(_mp01).astype(int)
-                        new_root, _ = self._prefer(nr0, nr1)
-                    else:
-                        new_root, _ = self._prefer(lrep, rrep)
-                    self._reassign_root(old_root, new_root)
+    def finalize_constraints(self):
+        """Return the parent for each index."""
+        # output = list(range(self.size))
+        # for i in output:
+        #     output[i] = self.find(i)
+        # output_arr = np.array(output)
+        # output_arr = self.linearize_unconstrained(output_arr)
+        # return output_arr.tolist()
+
+        # constraints = list(range(self.size))
+        # for i in constraints:
+        #     if not self.constrained[i] and 1:
+        #         self.enforce_nearby(i)
+        #     constraints[i] = self.find(i)
+        # return constraints
+
+        constraints = list(range(self.size))
+        for i in constraints:
+            if not self.constrained[i] and 1:
+                self._reassign_root(i, 0)
+            constraints[i] = self.find(i)
+        return constraints
 
 
 def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
@@ -229,9 +274,7 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     w = zar.shape[0]
     eye_scalar = round(2.5 * dpi)
     constraints_structure = DisjointSet(w, mu, dpi, approach)
-    constraints = list(range(w))
-    scan_order = constraints.copy()
-    visible_pixels = [False] * w
+    scan_order = list(range(w))
     if approach == 'random':
         np.random.shuffle(scan_order)
 
@@ -248,17 +291,9 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
             if visible:
                 constraints_structure.unite(left, right)
                 # constraints_structure.depth_unite(left, right, zar[x, y])
-                visible_pixels[left] = True
-                visible_pixels[right] = True
 
     # constraints_structure.global_enforce_nearby(9)
-
-    for i in constraints:
-        if not visible_pixels[i] and _re:
-            constraints_structure.enforce_nearby(i)
-        constraints[i] = constraints_structure.find(i)
-
-    return constraints
+    return constraints_structure.finalize_constraints()
 
 
 def _build_row_vectorized(asg_row, constraints):
