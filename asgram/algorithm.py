@@ -50,6 +50,7 @@ class DisjointSet:
             rma = self.size
             rmi = rma - rsize
             rsource = np.linspace(rmi, rma - 1, num=rsize).astype(int).tolist()
+            # can probably do arange here instead
 
             self.src = lsource + rsource
             assert len(self.src) == self.far
@@ -235,17 +236,88 @@ class DisjointSet:
         After constraint generation, linearly interpolate unconstrained pixels
         to ensure smoothness in output.
         """
-        parents = output_arr.copy()
-        deltas = (np.where(np.diff(self.constrained))[0]).tolist()
-        spans = [(s, e + 2) for s, e in zip(deltas[0::2], deltas[1::2])]
-        for s_idx, e_idx in spans:
-            span = parents[s_idx:e_idx]
-            start, end = span[[0, -1]]
-            interpolation = self._linearize(start, end, len(span))
-            output_arr[s_idx:e_idx] = interpolation
+        if self.src is not None:
+            parents = output_arr.copy()
+            deltas = (np.where(np.diff(self.constrained))[0]).tolist()
+            spans = [(s, e + 2) for s, e in zip(deltas[0::2], deltas[1::2])]
+            for s_idx, e_idx in spans:
+                span = parents[s_idx:e_idx]
+                start, end = span[[0, -1]]
+                interpolation = self._linearize(start, end, len(span))
+                output_arr[s_idx:e_idx] = interpolation
         return output_arr
 
-    def finalize_constraints(self):
+    def shift_oos_roots(self, output_arr):
+        """
+        Identify out of source roots, including unconstrained pixels, and shift
+        them to values within the source range.
+        """
+        if self.src is not None:
+            parents = output_arr.copy()
+            poss = np.arange(len(parents))
+            padded_bool_arr = np.concat([[False], parents == poss, [False]])
+            deltas = (np.where(np.diff(padded_bool_arr))[0]).tolist()
+            assert len(deltas[0::2]) == len(deltas[1::2])
+            spans = [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
+
+            for s_idx, e_idx in spans:
+                # check whether pixels in span partially originate from source
+                if (s_idx in self.src) or (e_idx in self.src):
+                    continue
+
+                # if oos, unite to either left pixels or right pixels
+                l_idx = s_idx - 1 if 0 < s_idx else None
+                r_idx = e_idx + 1 if self.size - 1 > e_idx else None
+
+                def _boundary_prefer(l_idx, r_idx):
+                    assert not ((l_idx is None) and (r_idx is None))
+                    if l_idx is None:
+                        return self.find(r_idx), 'r'
+                    elif r_idx is None:
+                        return self.find(l_idx), 'l'
+                    else:
+                        lrep, rrep = self.find(l_idx), self.find(r_idx)
+                        root, _ = self._prefer(lrep, rrep)
+                        return (root, 'l') if root == lrep else (root, 'r')
+
+                anchor, direction = _boundary_prefer(l_idx, r_idx)
+
+                # calculate shift based on anchor point
+                reference = s_idx if 'l' == direction else e_idx - 1
+                shift_oos = anchor - reference
+
+                # apply shift to anchor for values in span
+                # output_arr[s_idx:e_idx] += shift_oos
+
+                # apply shift to anchor for values in span
+                for idx in range(s_idx, e_idx):
+                    # check bounds
+                    new_parent = idx + shift_oos
+                    if self.size <= new_parent:
+                        in_bounds = False
+                        while not in_bounds:
+                            new_parent -= self.far
+                            if new_parent in self.src:
+                                in_bounds = True
+                        shift = new_parent - idx
+                    elif 0 > new_parent:
+                        in_bounds = False
+                        while not in_bounds:
+                            new_parent += self.far
+                            if new_parent in self.src:
+                                in_bounds = True
+                        shift = new_parent - idx
+                    else:
+                        shift = shift_oos
+
+                    # shift pixel by pixel
+                    output_arr[idx] += shift
+
+        self.parent = output_arr.tolist()
+        return [self.find(i) for i in range(self.size)]
+
+    @property
+    def constraints(self):
         """Return the parent for each index."""
         # output = list(range(self.size))
         # for i in output:
@@ -261,12 +333,9 @@ class DisjointSet:
         #     constraints[i] = self.find(i)
         # return constraints
 
-        constraints = list(range(self.size))
-        for i in constraints:
-            if not self.constrained[i] and 1:
-                self._reassign_root(i, 0)
-            constraints[i] = self.find(i)
-        return constraints
+        output = [self.find(i) for i in range(self.size)]
+        output = self.shift_oos_roots(np.array(output))
+        return output
 
 
 def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
@@ -293,7 +362,7 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
                 # constraints_structure.depth_unite(left, right, zar[x, y])
 
     # constraints_structure.global_enforce_nearby(9)
-    return constraints_structure.finalize_constraints()
+    return constraints_structure.constraints
 
 
 def _build_row_vectorized(asg_row, constraints):
