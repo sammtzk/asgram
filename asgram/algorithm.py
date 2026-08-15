@@ -57,12 +57,6 @@ class DisjointSet:
         else:
             return None
 
-    def find(self, idx):
-        """Find the representative of a set."""
-        if self.parent[idx] != idx:
-            self.parent[idx] = self.find(self.parent[idx])
-        return self.parent[idx]
-
     def _prefer(self, idx, jdx):
         if self.approach == 'mo':
             if abs(idx - self.mp) < abs(jdx - self.mp):
@@ -78,6 +72,12 @@ class DisjointSet:
             return max(idx, jdx), min(idx, jdx)
         return np.random.choice([idx, jdx], size=2, replace=False).tolist()
 
+    def find(self, idx):
+        """Find the representative of a set."""
+        if self.parent[idx] != idx:
+            self.parent[idx] = self.find(self.parent[idx])
+        return self.parent[idx]
+
     def unite(self, idx, jdx):
         """Join values."""
         irep, jrep = self.find(idx), self.find(jdx)
@@ -85,72 +85,23 @@ class DisjointSet:
             root, other = self._prefer(irep, jrep)
             self.parent[other] = root
 
-#    def _reassign_root(self, old_root, new_root):
-#        for i in range(self.size):
-#            if self.parent[i] == old_root:
-#                self.parent[i] = new_root
-#
-#    def enforce_nearby(self, idx, thresh=9):
-#        """Ensure that a pixel draws from similar nearby sources."""
-#        old_root = self.parent[idx]
-#        switch_flag = 0
-#
-#        lrep = self.find(idx - 1) if idx > 0 else np.nan
-#        if not np.isnan(lrep):
-#            if abs(lrep - old_root) > thresh:
-#                switch_flag += 1
-#        else:
-#            switch_flag += 1
-#
-#        rrep = self.find(idx + 1) if idx < self.size - 1 else np.nan
-#        if not np.isnan(rrep):
-#            if abs(rrep - old_root) > thresh:
-#                switch_flag += 1
-#        else:
-#            switch_flag += 1
-#
-#        if switch_flag == 2:
-#            if np.isnan(lrep) or np.isnan(rrep):
-#                _mp01 = np.nanmean([lrep, rrep])   # type: ignore
-#                nr0 = np.floor(_mp01).astype(int)
-#                nr1 = np.ceil(_mp01).astype(int)
-#                new_root, _ = self._prefer(nr0, nr1)
-#            else:
-#                nr, _ = self._prefer(lrep, rrep)
-#                sf = 0
-#
-#                nr0 = self.find(idx - 1) if idx > 0 else np.nan
-#                if not np.isnan(nr0):
-#                    if abs(nr0 - old_root) > thresh:
-#                        sf += 1
-#                else:
-#                    sf += 1
-#
-#                nr1 = self.find(idx + 1) if idx < self.size - 1 else np.nan
-#                if not np.isnan(nr1):
-#                    if abs(nr1 - old_root) > thresh:
-#                        sf += 1
-#                else:
-#                    sf += 1
-#
-#                if sf == 2:
-#                    if np.isnan(nr0) or np.isnan(nr1):
-#                        _mp01 = np.nanmean([nr0, nr1])   # type: ignore
-#                        nr2 = np.floor(_mp01).astype(int)
-#                        nr3 = np.ceil(_mp01).astype(int)
-#                        new_root, _ = self._prefer(nr2, nr3)
-#                    else:
-#                        new_root, _ = self._prefer(nr0, nr1)
-#                else:
-#                    new_root = nr
-#
-#            self._reassign_root(old_root, new_root)
+    def _boundary_prefer(self, l_idx, r_idx):
+        assert not ((l_idx is None) and (r_idx is None))
+        if l_idx is None:
+            return self.find(r_idx), 'r'
+        elif r_idx is None:
+            return self.find(l_idx), 'l'
+        else:
+            lrep, rrep = self.find(l_idx), self.find(r_idx)
+            root, _ = self._prefer(lrep, rrep)
+            return (root, 'l') if root == lrep else (root, 'r')
 
-    def shift_oos_roots(self, output_arr):
+    def shift_oos_roots(self):
         """
         Identify out of source roots, including unconstrained pixels, and shift
         them to values within the source range.
         """
+        output_arr = np.array([self.find(i) for i in range(self.size)])
         if self.src is not None:
             parents = output_arr.copy()
             poss = np.arange(len(parents))
@@ -171,19 +122,7 @@ class DisjointSet:
                 # if oos, unite to either left pixels or right pixels
                 l_idx = s_idx - 1 if 0 < s_idx else None
                 r_idx = e_idx + 1 if self.size - 1 > e_idx else None
-
-                def _boundary_prefer(l_idx, r_idx):
-                    assert not ((l_idx is None) and (r_idx is None))
-                    if l_idx is None:
-                        return self.find(r_idx), 'r'
-                    elif r_idx is None:
-                        return self.find(l_idx), 'l'
-                    else:
-                        lrep, rrep = self.find(l_idx), self.find(r_idx)
-                        root, _ = self._prefer(lrep, rrep)
-                        return (root, 'l') if root == lrep else (root, 'r')
-
-                anchor, direction = _boundary_prefer(l_idx, r_idx)
+                anchor, direction = self._boundary_prefer(l_idx, r_idx)
 
                 # calculate shift based on anchor point
                 reference = s_idx if 'l' == direction else e_idx - 1
@@ -212,23 +151,19 @@ class DisjointSet:
 
                     # shift pixel by pixel
                     output_arr[idx] += shift
-
         self.parent = output_arr.tolist()
-        return [self.find(i) for i in range(self.size)]
 
     @property
     def constraints(self):
         """Return the parent for each index."""
-        output = [self.find(i) for i in range(self.size)]
-        output = self.shift_oos_roots(np.array(output))
-        return output
+        return [self.find(i) for i in range(self.size)]
 
 
 def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     """Disjoint Set Data Structure Constrain"""
     w = zar.shape[0]
     eye_scalar = round(2.5 * dpi)
-    constraints_structure = DisjointSet(w, mu, dpi, approach)
+    pixel_map = DisjointSet(w, mu, dpi, approach)
     scan_order = list(range(w))
     if approach == 'random':
         np.random.shuffle(scan_order)
@@ -242,25 +177,18 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
             t, zt, visible = _do_work(1, zar, x, y, mu, eye_scalar)
             while visible and (zt < 1):
                 t, zt, visible = _do_work(t, zar, x, y, mu, eye_scalar)
-
             if visible:
-                constraints_structure.unite(left, right)
+                pixel_map.unite(left, right)
 
-    return constraints_structure.constraints
+    if _re:
+        pixel_map.shift_oos_roots()
+    return pixel_map.constraints
 
 
 def _build_row_vectorized(asg_row, constraints):
     constraints = np.asarray(constraints)
-    same = constraints == np.arange(constraints.size)
-    not_visible = constraints == -99
-    pointers = ~(same | not_visible)
-
-    if np.any(pointers):
-        asg_row[:, pointers] = asg_row[:, constraints[pointers]]
-
-    if np.any(not_visible):
-        asg_row[:, not_visible] = np.array([255, 0, 0])[:, None]
-
+    pointers = (constraints != np.arange(constraints.size))
+    asg_row[:, pointers] = asg_row[:, constraints[pointers]]
     return asg_row
 
 
