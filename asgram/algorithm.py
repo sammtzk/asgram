@@ -21,6 +21,7 @@ class DisjointSet:
         self.size = list_size
         self.far = _pixel_separation(0, mu, dpi, cross_eyed=False)
         self.parent = list(range(self.size))
+        self.constrained = [False] * self.size
         self.approach = approach
         self.mp = (self.size - 1) / 2
         self.src = self._source_specification()
@@ -80,12 +81,14 @@ class DisjointSet:
 
     def unite(self, idx, jdx):
         """Join values."""
+        self.constrained[idx] = True
+        self.constrained[jdx] = True
         irep, jrep = self.find(idx), self.find(jdx)
         if irep != jrep:
             root, other = self._prefer(irep, jrep)
             self.parent[other] = root
 
-    def _boundary_prefer(self, l_idx, r_idx):
+    def _boundary_prefer(self, l_idx, r_idx, zar_row=None):
         assert not ((l_idx is None) and (r_idx is None))
         if l_idx is None:
             return self.find(r_idx), 'r'
@@ -93,39 +96,52 @@ class DisjointSet:
             return self.find(l_idx), 'l'
         else:
             lrep, rrep = self.find(l_idx), self.find(r_idx)
-            root, _ = self._prefer(lrep, rrep)
+            if zar_row is not None:
+                lz, rz = zar_row[lrep], zar_row[rrep]
+                root = lrep if lz < rz else rrep
+            else:
+                root, _ = self._prefer(lrep, rrep)
             return (root, 'l') if root == lrep else (root, 'r')
 
-    def shift_oos_roots(self):
+    def shift_oos_roots(self, zar_row=None):
         """
         Identify out of source roots, including unconstrained pixels, and shift
         them to values within the source range.
         """
         output_arr = np.array([self.find(i) for i in range(self.size)])
         if self.src is not None:
-            parents = output_arr.copy()
-            poss = np.arange(len(parents))
-            padded_bool_arr = np.concat([[False], parents == poss, [False]])
-            deltas = (np.where(np.diff(padded_bool_arr))[0]).tolist()
-            assert len(deltas[0::2]) == len(deltas[1::2])
-            spans = [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
+            def _span_maker(mask):
+                parents = output_arr.copy()
+                parents[mask] = -1
+                matches = parents == np.arange(len(parents))
+                padded_matches = np.concat([[False], matches, [False]])
+                deltas = (np.where(np.diff(padded_matches))[0]).tolist()
+                assert len(deltas[0::2]) == len(deltas[1::2])
+                return [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
+
+            uncon_mask = ~(np.asarray(self.constrained))
+            uncon_spans = _span_maker(uncon_mask)
+            uncon_spans = [(span, True) for span in uncon_spans]
+            root_spans = _span_maker(~uncon_mask)
+            root_spans = [(span, False) for span in root_spans]
+            all_spans = uncon_spans + root_spans
 
             # establish bounds for approach-specific sources
-            src_l = min(self.src).item()
-            src_u = max(self.src).item()
-
-            for s_idx, e_idx in spans:
+            src_l, src_u = min(self.src).item(), max(self.src).item()
+            for span, use_z in all_spans:
                 # check whether pixels in span partially originate from source
+                s_idx, e_idx = span
                 if (s_idx in self.src) or (e_idx in self.src):
                     continue
 
                 # if oos, unite to either left pixels or right pixels
                 l_idx = s_idx - 1 if 0 < s_idx else None
                 r_idx = e_idx + 1 if self.size - 1 > e_idx else None
-                anchor, direction = self._boundary_prefer(l_idx, r_idx)
+                zar_row_val = zar_row if use_z else None
+                anchor, side = self._boundary_prefer(l_idx, r_idx, zar_row_val)
 
                 # calculate shift based on anchor point
-                reference = s_idx if 'l' == direction else e_idx - 1
+                reference = s_idx if 'l' == side else e_idx - 1
                 shift_oos = anchor - reference
 
                 # apply shift to anchor for values in span
@@ -149,7 +165,7 @@ class DisjointSet:
                     else:
                         shift = shift_oos
 
-                    # shift pixel by pixel
+                    # shift individual pixel
                     output_arr[idx] += shift
         self.parent = output_arr.tolist()
 
@@ -181,7 +197,7 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
                 pixel_map.unite(left, right)
 
     if _re:
-        pixel_map.shift_oos_roots()
+        pixel_map.shift_oos_roots(zar[:, y])
     return pixel_map.constraints
 
 
