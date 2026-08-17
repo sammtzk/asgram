@@ -22,6 +22,7 @@ class DisjointSet:
         self.far = _pixel_separation(0, mu, dpi, cross_eyed=False)
         self.parent = list(range(self.size))
         self.constrained = [False] * self.size
+        # self.recursion_safety = 0
         self.approach = approach
         self.mp = (self.size - 1) / 2
         self.src = self._source_specification()
@@ -73,21 +74,6 @@ class DisjointSet:
             return max(idx, jdx), min(idx, jdx)
         return np.random.choice([idx, jdx], size=2, replace=False).tolist()
 
-    def find(self, idx):
-        """Find the representative of a set."""
-        if self.parent[idx] != idx:
-            self.parent[idx] = self.find(self.parent[idx])
-        return self.parent[idx]
-
-    def unite(self, idx, jdx):
-        """Join values."""
-        self.constrained[idx] = True
-        self.constrained[jdx] = True
-        irep, jrep = self.find(idx), self.find(jdx)
-        if irep != jrep:
-            root, other = self._prefer(irep, jrep)
-            self.parent[other] = root
-
     def _boundary_prefer(self, l_idx, r_idx, zar_row=None):
         assert not ((l_idx is None) and (r_idx is None))
         if l_idx is None:
@@ -103,12 +89,38 @@ class DisjointSet:
                 root, _ = self._prefer(lrep, rrep)
             return (root, 'l') if root == lrep else (root, 'r')
 
+    def find(self, idx):
+        """Find the representative of a set."""
+        try:
+            if self.parent[idx] != idx:
+                self.parent[idx] = self.find(self.parent[idx])
+        except RecursionError:
+            while self.parent[idx] != idx:
+                self.parent[idx] = self.parent[self.parent[idx]]
+                idx = self.parent[idx]
+        return self.parent[idx]
+
+    def unite(self, idx, jdx):
+        """Join values."""
+        self.constrained[idx] = True
+        self.constrained[jdx] = True
+
+        irep, jrep = self.find(idx), self.find(jdx)
+        if irep != jrep:
+            root, other = self._prefer(irep, jrep)
+            self.parent[other] = root
+
+    @property
+    def constraints(self):
+        """Return the parent for each index."""
+        return [self.find(i) for i in range(self.size)]
+
     def shift_oos_roots(self, zar_row=None):
         """
         Identify out of source roots, including unconstrained pixels, and shift
         them to values within the source range.
         """
-        output_arr = np.array([self.find(i) for i in range(self.size)])
+        output_arr = np.array(self.constraints)     # type: ignore
         if self.src is not None:
             def _span_maker(mask):
                 parents = output_arr.copy()
@@ -165,14 +177,11 @@ class DisjointSet:
                     else:
                         shift = shift_oos
 
-                    # shift individual pixel
+                    # shift individual pixel and reassign the root
                     output_arr[idx] += shift
+                    if not use_z:
+                        output_arr[output_arr == idx] = output_arr[idx]
         self.parent = output_arr.tolist()
-
-    @property
-    def constraints(self):
-        """Return the parent for each index."""
-        return [self.find(i) for i in range(self.size)]
 
 
 def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
