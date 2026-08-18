@@ -1,18 +1,15 @@
 # asgram/algorithm.py
 """
-Utility functions for the creation of autostereograms.
+Constraint building algorithms for the creation of autostereograms.
 """
 
 import numpy as np
 try:
-    from asgram.tiw import _do_work, _separation
+    from asgram.utils.tiw import _do_work
+    from asgram.utils.utils import _pixel_separation
 except ModuleNotFoundError:
-    from tiw import _do_work, _separation
-
-
-def _pixel_separation(Z, mu=1/3, dpi=72, cross_eyed=False):
-    Z = -Z + 1.0 if cross_eyed else Z
-    return _separation(Z=Z, mu=mu, dpi=dpi)
+    from utils.tiw import _do_work
+    from utils.utils import _pixel_separation
 
 
 class DisjointSet:

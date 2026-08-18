@@ -7,14 +7,14 @@ from PIL import Image, ImageChops, ImageFilter
 import numpy as np
 import cv2 as cv
 try:
-    from asgram.tiw import _separation
-    from asgram.parallelize.local_process import (
+    from asgram.utils.utils import _pixel_separation
+    from asgram.utils.temp_parallelize_alt import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
     )
 except ModuleNotFoundError:
-    from tiw import _separation
-    from parallelize.local_process import (
+    from utils.utils import _pixel_separation
+    from utils.temp_parallelize_alt import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
     )
@@ -41,7 +41,7 @@ def _normalize_img_array(_arr, normalize=True):
 
 
 def _pad_img_array(_arr, mu=1/3, dpi=72):
-    far = _separation(0, mu, dpi)
+    far = _pixel_separation(0, mu, dpi, cross_eyed=False)
     l_pad = np.repeat(_arr[0:1, :], far, axis=0)
     r_pad = np.repeat(_arr[-1:, :], far, axis=0)
     return np.vstack((l_pad, _arr, r_pad))
@@ -173,34 +173,6 @@ def integrated_img_smooth(_img, num_jobs=-1):
     lss_only = ImageChops.multiply(lss_img, ImageChops.invert(static_mask))
 
     return ImageChops.add(edges_only, lss_only)
-
-
-def _deprecated_smooth_img_array(_arr, mu=1/3, dpi=72, smoothing_amt=0):
-    """Deprecateed."""
-    if smoothing_amt > 0:
-        far = _separation(0, mu, dpi)
-        near = _separation(1, mu, dpi)
-        detail = np.ceil(255 / (far - near))
-
-        ls_arr = np.roll(_arr, shift=-1, axis=0)
-        rs_arr = np.roll(_arr, shift=1, axis=0)
-
-        rmask = np.abs(_arr - rs_arr) < detail
-        lmask = np.abs(_arr - ls_arr) < detail
-
-        mask = rmask | lmask
-        ls_amt = -int(round(smoothing_amt / 2))
-        rs_amt = ls_amt + smoothing_amt
-        for i in range(abs(ls_amt)):
-            mask = mask & np.roll(mask, shift=-(i + 1), axis=0)
-        for i in range(abs(rs_amt)):
-            mask = mask & np.roll(mask, shift=(i + 1), axis=0)
-
-        # pylint: disable=no-member
-        hsmooth = cv.GaussianBlur(_arr, (1, smoothing_amt), 0)
-        _arr[mask] = hsmooth[mask]
-
-    return _arr
 
 
 # Object Maker

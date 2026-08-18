@@ -6,14 +6,14 @@ Functions for cleaning up autostereograms and adding convergence helpers.
 import copy
 import numpy as np
 try:
-    from asgram.algorithm import _pixel_separation
-    from asgram.parallelize.local_process import (
+    from asgram.utils.utils import _pixel_separation
+    from asgram.utils.temp_parallelize_alt import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
     )
 except ModuleNotFoundError:
-    from algorithm import _pixel_separation
-    from parallelize.local_process import (
+    from utils.utils import _pixel_separation
+    from utils.temp_parallelize_alt import (
         UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
         determine_processes, pool_runs
     )

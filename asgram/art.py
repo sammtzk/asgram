@@ -10,7 +10,7 @@ try:
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SrcPat
     from asgram.postprocessing import finish
-    from asgram.parallelize.generic import (
+    from asgram.utils.parallelize import (
         worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
@@ -18,7 +18,7 @@ except ModuleNotFoundError:
     from depth_map_making import ZMap
     from source_pattern_making import SrcPat
     from postprocessing import finish
-    from parallelize.generic import (
+    from utils.parallelize import (
         worker_count, run_worker, parallelize_workers
     )
 

@@ -1,4 +1,4 @@
-# asgram/tiw.py
+# asgram/utils/tiw.py
 """
 Constraint Satisfaction Algorithm for Stereogram Generation.
 

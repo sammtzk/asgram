@@ -1,9 +1,15 @@
-# asgram/parallelize/generic.py
+# asgram/utils/parallelize.py
+"""
+Generic framework for parallelization of expensive processes.
+"""
 
 import time
 from multiprocessing import cpu_count, get_context
 import numpy as np
-from asgram.parallelize.local_process import progress_bar
+try:
+    from asgram.utils.progress_bar import progress_bar
+except ModuleNotFoundError:
+    from utils.progress_bar import progress_bar
 
 
 # Multiprocessing parameters
@@ -13,9 +19,7 @@ UPDATE_PROGRESS = 1.0
 
 # Generic parallelization framework
 def worker_count(processes=8):
-    """
-    Determine how many processes to run based on CPU core availability.
-    """
+    """Determine how many processes to run based on CPU core availability."""
     max_processes = cpu_count()
     if -1 == processes or processes > max_processes:
         processes = max_processes
@@ -25,9 +29,7 @@ def worker_count(processes=8):
 
 
 def worker_init(shared_counter, shared_lock, shared_stop_event):
-    """
-    Initialize shared multiprocessing state across workers.
-    """
+    """Initialize shared multiprocessing state across workers."""
     # pylint: disable=global-statement
     global COUNTER, LOCK, STOP_EARLY
     COUNTER = shared_counter
@@ -41,9 +43,7 @@ def worker_init(shared_counter, shared_lock, shared_stop_event):
 
 
 def run_worker(ys_to_build, args_dict, spec_row_func, dim=3):
-    """
-    Handle parallelization states for specialized workers.
-    """
+    """Handle parallelization states for specialized workers."""
     total = len(ys_to_build)
     prog = int(np.ceil(total / UPDATE_COUNTER))
     build_mat = np.zeros_like(args_dict['src_mat'])

@@ -1,4 +1,4 @@
-# asgram/wgui.py
+# gui/wgui.py
 """
 Functions for making polished single image stereograms.
 """
@@ -12,16 +12,10 @@ from IPython.display import display
 from IPython.display import Image as IPyImage
 from PIL import Image
 from matplotlib import colormaps
-try:
-    from asgram.depth_map_making import ZMap
-    from asgram.source_pattern_making import SrcPat
-    from asgram.art import synthesizer
-    from asgram.postprocessing import finish
-except ModuleNotFoundError:
-    from depth_map_making import ZMap
-    from source_pattern_making import SrcPat
-    from art import synthesizer
-    from postprocessing import finish
+from asgram.depth_map_making import ZMap
+from asgram.source_pattern_making import SrcPat
+from asgram.art import synthesizer
+from asgram.postprocessing import finish
 
 
 def asgram_widgets():

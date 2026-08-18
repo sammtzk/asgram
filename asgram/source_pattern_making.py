@@ -7,9 +7,9 @@ import numpy as np
 from PIL import Image
 from matplotlib import colormaps
 try:
-    from asgram.algorithm import _pixel_separation
+    from asgram.utils.utils import _pixel_separation
 except ModuleNotFoundError:
-    from algorithm import _pixel_separation
+    from utils.utils import _pixel_separation
 
 
 # Pattern Making Helpers
