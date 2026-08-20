@@ -7,15 +7,13 @@ import copy
 import numpy as np
 try:
     from asgram.utils.utils import _pixel_separation
-    from asgram.utils.temp_parallelize_alt import (
-        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
-        determine_processes, pool_runs
+    from asgram.utils.parallelize import (
+            worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
     from utils.utils import _pixel_separation
-    from utils.temp_parallelize_alt import (
-        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
-        determine_processes, pool_runs
+    from utils.parallelize import (
+            worker_count, run_worker, parallelize_workers
     )
 
 
@@ -54,34 +52,23 @@ def _row_pdvrpp(asg_row, thresh=25):
     return asg_row
 
 
-def _pdvrpp_worker(args):
-    pull_from, thresh, ys_to_build = args
-    _arr = np.zeros_like(pull_from)
-    total = len(ys_to_build)
-    prog = int(np.ceil(total / UPDATE_COUNTER))
+def _pdvrpp_worker(_args):
+    """Worker for pdvrpp parallelization. Wraps generic run_worker."""
+    ys_to_build, args_dict = _args
 
-    for i, y in enumerate(ys_to_build):
-        _arr[:, :, y] = _row_pdvrpp(pull_from[:, :, y], thresh)
+    def _row_func_wrapper(y, ad=args_dict):
+        """Wrapper for _row_pdvrpp."""
+        return _row_pdvrpp(asg_row=ad['src_mat'][:, :, y])
 
-        if STOP_EARLY.is_set():
-            break
-        elif (i + 1) % prog == 0 or i + 1 == total:
-            with LOCK:
-                COUNTER.value += prog if (i + 1) % prog == 0 else total % prog
-
-    return _arr
+    return run_worker(ys_to_build, args_dict, _row_func_wrapper, dim=3)
 
 
 def pdvrpp(asg, thresh=25, num_jobs=-1):
-    """Pixel Disparity Visual Rectification Post-Processing"""
-    jobs = determine_processes(num_jobs)
+    """Pixel Disparity Visual Rectification Post-Processing."""
+    jobs = worker_count(num_jobs)
     if 1 < jobs:
-        chunks = np.array_split(list(range(asg.shape[2])), jobs)
-        _args = [(asg, thresh, c) for c in chunks]
-        results = pool_runs(_pdvrpp_worker, _args, asg.shape[2], jobs)
-        asg = np.zeros_like(asg)
-        for r in results:
-            asg += r
+        args_dict = {'src_mat': asg, 'total_ys': asg.shape[2]}
+        asg = parallelize_workers(args_dict, _pdvrpp_worker, jobs)
     else:
         for y in range(asg.shape[2]):
             asg[:, :, y] = _row_pdvrpp(asg[:, :, y], thresh)

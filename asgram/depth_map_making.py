@@ -8,15 +8,13 @@ import numpy as np
 import cv2 as cv
 try:
     from asgram.utils.utils import _pixel_separation
-    from asgram.utils.temp_parallelize_alt import (
-        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
-        determine_processes, pool_runs
+    from asgram.utils.parallelize import (
+            worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
     from utils.utils import _pixel_separation
-    from utils.temp_parallelize_alt import (
-        UPDATE_COUNTER, COUNTER, LOCK, STOP_EARLY,
-        determine_processes, pool_runs
+    from utils.parallelize import (
+            worker_count, run_worker, parallelize_workers
     )
 
 
@@ -48,7 +46,7 @@ def _pad_img_array(_arr, mu=1/3, dpi=72):
 
 
 # Image Smoothing
-def _row_linearization_smooth(_arr, thresh=0.64, min_win=9, min_lap=3):
+def _row_linearization_smooth(_arr, thresh=0.64, window=9, overlap=3):
     """
     Identifies approximately linear segments within an array and increases the
     granularity of the linear step.
@@ -57,9 +55,6 @@ def _row_linearization_smooth(_arr, thresh=0.64, min_win=9, min_lap=3):
     length = mxb.shape[0]
     index_arr = np.linspace(0, 1, length)
     mask_arr = np.full(length, np.nan)
-
-    window = min_win  # int(max(np.ceil(length / 24), min_win))
-    overlap = min_lap  # int(max(np.ceil(window / 6), min_lap))
 
     start = 0
     stop = window
@@ -109,37 +104,26 @@ def _row_linearization_smooth(_arr, thresh=0.64, min_win=9, min_lap=3):
     return mxb
 
 
-def _lss_worker(args):
-    pull_from, ys_to_build = args
-    _arr = np.zeros_like(pull_from)
-    total = len(ys_to_build)
-    prog = int(np.ceil(total / UPDATE_COUNTER))
+def _lss_worker(_args):
+    """Worker for lss parallelization. Wraps generic run_worker."""
+    ys_to_build, args_dict = _args
 
-    for i, y in enumerate(ys_to_build):
-        _arr[:, y] = _row_linearization_smooth(pull_from[:, y])
+    def _row_func_wrapper(y, ad=args_dict):
+        """Wrapper for _row_linearization_smooth."""
+        return _row_linearization_smooth(_arr=ad['src_mat'][:, y])
 
-        if STOP_EARLY.is_set():
-            break
-        elif (i + 1) % prog == 0 or i + 1 == total:
-            with LOCK:
-                COUNTER.value += prog if (i + 1) % prog == 0 else total % prog
-
-    return _arr
+    return run_worker(ys_to_build, args_dict, _row_func_wrapper, dim=2)
 
 
-def _linear_segment_smooth(_arr, num_jobs=-1):
+def linear_segment_smooth(_arr, num_jobs=-1):
     """
     Identifies approximately linear segments and increases the granularity of
     the linear step within each row of a depth array.
     """
-    jobs = determine_processes(num_jobs)
+    jobs = worker_count(num_jobs)
     if 1 < jobs:
-        chunks = np.array_split(list(range(_arr.shape[1])), jobs)
-        _args = [(_arr, c) for c in chunks]
-        results = pool_runs(_lss_worker, _args, _arr.shape[1], jobs)
-        _arr = np.zeros_like(_arr)
-        for r in results:
-            _arr += r
+        args_dict = {'src_mat': _arr, 'total_ys': _arr.shape[1]}
+        _arr = parallelize_workers(args_dict, _lss_worker, jobs)
     else:
         for y in range(_arr.shape[1]):
             _arr[:, y] = _row_linearization_smooth(_arr[:, y])
@@ -167,7 +151,7 @@ def integrated_img_smooth(_img, num_jobs=-1):
 
     static_mask = Image.fromarray(_mask.T)
 
-    lss_img = Image.fromarray(_linear_segment_smooth(hblur_arr, num_jobs).T)
+    lss_img = Image.fromarray(linear_segment_smooth(hblur_arr, num_jobs).T)
 
     edges_only = ImageChops.multiply(hblur_img, static_mask)
     lss_only = ImageChops.multiply(lss_img, ImageChops.invert(static_mask))

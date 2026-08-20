@@ -30,14 +30,14 @@ def _synth_worker(_args):
     def _row_func_wrapper(y, ad=args_dict):
         """Wrapper for _asg_row."""
         return _asg_row(
-            asg=ad["src_mat"],
+            asg=ad['src_mat'],
             y=y,
-            zar=ad["zar"],
-            _re=ad["_re"],
-            mu=ad["mu"],
-            dpi=ad["dpi"],
-            cross_eyed=ad["cross"],
-            approach=ad["approach"]
+            zar=ad['zar'],
+            _re=ad['_re'],
+            mu=ad['mu'],
+            dpi=ad['dpi'],
+            cross_eyed=ad['cross'],
+            approach=ad['approach']
         )
 
     return run_worker(ys_to_build, args_dict, _row_func_wrapper, dim=3)
@@ -57,20 +57,16 @@ def synthesizer(
     jobs = worker_count(num_jobs)
     if 1 < jobs:
         args_dict = {
-            "src_mat": asg,
-            "total_ys": zar.shape[1],
-            "zar": zar,
-            "_re": _re,
-            "mu": mu,
-            "dpi": dpi,
-            "cross": cross,
-            "approach": approach
+            'src_mat': asg,
+            'total_ys': zar.shape[1],
+            'zar': zar,
+            '_re': _re,
+            'mu': mu,
+            'dpi': dpi,
+            'cross': cross,
+            'approach': approach
         }
-        results = parallelize_workers(args_dict, _synth_worker, jobs)
-        asg = np.zeros_like(asg)
-        for r in results:
-            if r is not None:
-                asg += r
+        asg = parallelize_workers(args_dict, _synth_worker, jobs)
     else:
         for y in range(zar.shape[1]):
             asg[:, :, y] = _asg_row(

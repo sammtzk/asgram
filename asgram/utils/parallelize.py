@@ -108,4 +108,8 @@ def parallelize_workers(args_dict, spec_worker_func, processes):
             results = async_results.get()
             progress_bar(total_ys - 1, total_ys)
 
-    return results
+    output_matrix = np.zeros_like(args_dict['src_mat'])
+    for r in results:
+        if r is not None:
+            output_matrix += r
+    return output_matrix
