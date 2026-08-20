@@ -119,20 +119,19 @@ class DisjointSet:
         """
         output_arr = np.array(self.constraints)     # type: ignore
         if self.src is not None:
-            def _span_maker(mask):
+            def _span_maker(mask, use_z):
                 parents = output_arr.copy()
                 parents[mask] = -1
                 matches = parents == np.arange(len(parents))
                 padded_matches = np.concat([[False], matches, [False]])
                 deltas = (np.where(np.diff(padded_matches))[0]).tolist()
                 assert len(deltas[0::2]) == len(deltas[1::2])
-                return [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
+                spans = [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
+                return [(span, use_z) for span in spans]
 
             uncon_mask = ~(np.asarray(self.constrained))
-            uncon_spans = _span_maker(uncon_mask)
-            uncon_spans = [(span, True) for span in uncon_spans]
-            root_spans = _span_maker(~uncon_mask)
-            root_spans = [(span, False) for span in root_spans]
+            uncon_spans = _span_maker(uncon_mask, use_z=True)
+            root_spans = _span_maker(~uncon_mask, use_z=False)
             all_spans = uncon_spans + root_spans
 
             # establish bounds for approach-specific sources
