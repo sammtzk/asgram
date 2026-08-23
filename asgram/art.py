@@ -93,8 +93,11 @@ def asgram(
     """
     np.random.seed(random_seed)
     _zm = ZMap(img, mu, dpi, scale, iis, bil, invert, normalize, pad, num_jobs)
+    np.random.seed(random_seed)
     _sp = SrcPat(_zm.size, ref, cross, mu, dpi, rfit, approach, rpal)
+    np.random.seed(random_seed)
     asg = synthesizer(_zm, _sp, mu, dpi, cross, approach, num_jobs)
+    np.random.seed(random_seed)
     asg = finish(asg, dot_depth, dot_height, mu, dpi, cross, pdvrs, num_jobs)
 
     return Image.fromarray(asg.T)
