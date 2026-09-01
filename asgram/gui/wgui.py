@@ -9,6 +9,7 @@ from ipywidgets import (
     FloatSlider, IntSlider, Dropdown, Checkbox,
     HBox, VBox, HTML, FileUpload, Button, Output
 )
+from ipyfilechooser import FileChooser
 from IPython.display import display
 from IPython.display import Image as IPyImage
 import numpy as np
@@ -83,6 +84,7 @@ def asgram_widgets():
 
     # Depth Map Widgets
     img_upload = FileUpload(accept='image/*', multiple=False)
+    src_upload = FileChooser()
 
     normalize = Checkbox(
         value=True,
@@ -116,14 +118,17 @@ def asgram_widgets():
 
     def _zm_make_clicked(b):
         _ = b
-        if img_upload.value != ():
-            img = Image.open(BytesIO(img_upload.value[0].content))
+        if src_upload.value != () or src_upload.selected is not None:
+            if src_upload.selected is not None:
+                src_img = src_upload.selected
+            else:
+                src_img = Image.open(BytesIO(img_upload.value[0].content))
             nonlocal _zmap
 
             np.random.seed(random_seed.value)
             with zm_output:
                 _zmap = ZMap(
-                    img,
+                    src_img,
                     mu.value,
                     dpi.value,
                     scale.value,
@@ -153,7 +158,10 @@ def asgram_widgets():
 
     dw = VBox([
         HTML('<b>Depth Map Options<b>'),
-        HBox([HTML('Upload Depth Map:'), img_upload]),
+        HBox([
+            HTML('Upload Depth Map:'), img_upload,
+            HTML(' or '), src_upload
+        ]),
         HBox([
             VBox([normalize, invert, pad]),
             VBox([iis, bil, scale])

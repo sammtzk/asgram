@@ -3,9 +3,11 @@
 Functions for cleaning up, standardizing, and rescaling depth maps.
 """
 
-from PIL import Image, ImageChops, ImageFilter
+import os
 import numpy as np
 import cv2 as cv
+from PIL import Image
+import openexr_numpy
 try:
     from asgram.utils.utils import _pixel_separation
     from asgram.utils.parallelize import (
@@ -18,14 +20,7 @@ except ModuleNotFoundError:
     )
 
 
-# PIL Methods Integration
-def _resize_img(_img, mult=1.0):
-    if 0.0 < mult and 1.0 != mult:
-        _img = _img.resize([int(round(n * np.sqrt(mult))) for n in _img.size])
-    return _img
-
-
-# NumPy Methods Integration
+# NumPy and OpenCV Methods Integration
 def _normalize_img_array(_arr, normalize=True):
     _arr = np.array(_arr, dtype=np.float32)
     if not normalize:
@@ -36,6 +31,14 @@ def _normalize_img_array(_arr, normalize=True):
         return (_arr - min_val) / (max_val - min_val)
     else:
         return _arr / 255
+
+
+def _resize_img_array(_arr, mult=1.0):
+    if 0.0 < mult and 1.0 != mult:
+        dims = tuple(int(round(n * np.sqrt(mult))) for n in _arr.shape[::-1])
+        interpolation = cv.INTER_AREA if 1.0 > mult else cv.INTER_LANCZOS4
+        _arr = cv.resize(_arr, dims, interpolation=interpolation)
+    return _arr
 
 
 def _pad_img_array(_arr, mu=1/3, dpi=72):
@@ -131,45 +134,39 @@ def linear_segment_smooth(_arr, num_jobs=-1):
     return _arr
 
 
-def integrated_img_smooth(_img, num_jobs=-1):
+def integrated_image_smooth(_arr, num_jobs=-1):
     """
-    Smooths an image row-wise using linearization smoothing while preserving
-    edges using edge detection and bilateral filtering.
+    Smooths a [0, 1] normalized image row-wise using linearization smoothing
+    while preserving edges using edge detection and bilateral filtering.
     """
-    hblur_arr = cv.GaussianBlur(np.array(_img.convert('L')).T, (1, 3), 0)
-    hblur_img = Image.fromarray(hblur_arr.T)
-
-    edge_detection = np.array(hblur_img.filter(ImageFilter.FIND_EDGES)).T
+    blur_arr = cv.GaussianBlur(_arr, (1, 3), 0)
+    edge_detection = cv.Canny((blur_arr * 255.0).astype(np.uint8), 50, 150)
     smoothed_edges = cv.bilateralFilter(edge_detection, 9, 75, 75) > 100
     rshift = np.roll(smoothed_edges, shift=1, axis=0)
     lshift = np.roll(smoothed_edges, shift=-1, axis=0)
+
     edge_mask = smoothed_edges | rshift | lshift
+    b_mask = blur_arr == 0.0
+    w_mask = blur_arr == 1.0
+    static_mask = b_mask | w_mask | edge_mask
 
-    b_mask = hblur_arr == 0
-    w_mask = hblur_arr == 255
-    _mask = b_mask | w_mask | edge_mask
+    lss_arr = linear_segment_smooth(blur_arr, num_jobs)
+    composite = np.where(static_mask, blur_arr, lss_arr)
 
-    static_mask = Image.fromarray(_mask.T)
-
-    lss_img = Image.fromarray(linear_segment_smooth(hblur_arr, num_jobs).T)
-
-    edges_only = ImageChops.multiply(hblur_img, static_mask)
-    lss_only = ImageChops.multiply(lss_img, ImageChops.invert(static_mask))
-
-    return ImageChops.add(edges_only, lss_only)
+    return composite
 
 
 # Object Maker
 class ZMap:
-    """ Stores and augments depth maps using PIL and NumPy methods."""
+    """ Stores and augments depth maps using OpenCV and NumPy methods."""
 
     def __init__(
-            self, img, mu=1/3, dpi=72,
+            self, source, mu=1/3, dpi=72,
             scale=1.0, iis=False, bil=False,
             invert=False, normalize=True, pad=False,
             num_jobs=-1
     ):
-        self.img = img
+        self.src_arr = self._matrix_from_source(source)
         self.mu = mu
         self.dpi = dpi
 
@@ -181,27 +178,42 @@ class ZMap:
         self.normalize = normalize
         self.pad = pad
 
-        self.num_jobs = num_jobs
+        self.jobs = num_jobs
 
         self.size = (0, 0)
         self.zm_arr = np.array([])
         self.zm_img = Image.new('1', (0, 0))
         self.update()
 
+    @staticmethod
+    def _matrix_from_source(source):
+        assert isinstance(source, (np.ndarray, Image.Image, str))
+        match source:
+            case str():
+                assert os.path.isfile(source)
+                if '.exr' == source[-4::]:
+                    return openexr_numpy.imread(source, channel_names='V').T
+                else:
+                    # source format should be in Image.registered_extensions()
+                    return np.array(Image.open(source).convert('L')).T
+            case Image.Image():
+                return np.array(source.copy().convert('L')).T
+            case _:
+                return source.copy()    # assumes array shape is (w, h)
+
     def update(self):
         """Updates the depth map image according to class parameters."""
         print("Step: Depth Map Making")
-        zmap = self.img.copy().convert('L')
-        zmap = integrated_img_smooth(zmap, self.num_jobs) if self.iis else zmap
-        zmap = _resize_img(zmap, self.scale)
-        zmap = ImageChops.invert(zmap) if self.invert else zmap
+        zarr = self.src_arr.copy()
 
-        zarr = np.array(zmap).T
-        zarr = cv.bilateralFilter(zarr, 9, 75, 75) if self.bil else zarr
         zarr = _normalize_img_array(zarr, self.normalize)
+        zarr = (1.0 - zarr) if self.invert else zarr
+        zarr = _resize_img_array(zarr, self.scale)
+        zarr = cv.bilateralFilter(zarr, 9, 75, 75) if self.bil else zarr
+        zarr = integrated_image_smooth(zarr, self.jobs) if self.iis else zarr
         zarr = _pad_img_array(zarr, self.mu, self.dpi) if self.pad else zarr
 
         self.size = zarr.shape
         self.zm_arr = zarr
-        self.zm_img = Image.fromarray(zarr.T * 255)
+        self.zm_img = Image.fromarray(zarr.T * 255.0)
         print("Complete.")

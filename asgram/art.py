@@ -78,7 +78,7 @@ def synthesizer(
 
 
 def asgram(
-    img, ref=None, rfit='fit',
+    src, ref=None, rfit='fit',
     mu=1/3, dpi=72, cross=False, approach='rl',
     normalize=True, invert=False, iis=False, bil=False, pad=False, scale=1.0,
     rpal='bw', random_seed=1132,
@@ -92,7 +92,7 @@ def asgram(
     Thimbleby, Inglis, & Witten (1994), adapted to Python.
     """
     np.random.seed(random_seed)
-    _zm = ZMap(img, mu, dpi, scale, iis, bil, invert, normalize, pad, num_jobs)
+    _zm = ZMap(src, mu, dpi, scale, iis, bil, invert, normalize, pad, num_jobs)
     np.random.seed(random_seed)
     _sp = SrcPat(_zm.size, ref, cross, mu, dpi, rfit, approach, rpal)
     np.random.seed(random_seed)
