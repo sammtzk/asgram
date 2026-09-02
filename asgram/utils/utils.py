@@ -42,8 +42,8 @@ class AllParameters():
 
     # postprocessing
     pixel_disparity_smoothing: bool = False     # pdvrs
-    convergence_dot_depth: float = 0.0          # dot_depth
-    convergence_dot_placement: str = 'bottom'   # dot_height
+    convergence_dot_depth: float = -1.0         # dot_depth [asgram default=0.0]  # noqa E501
+    convergence_dot_placement: str = 'top'      # dot_height [asgram default='bottom']  # noqa E501
 
     def item_lookup(self, field_name):
         if hasattr(self, field_name):
