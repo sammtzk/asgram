@@ -1,60 +1,31 @@
 # asgram/gui/pyside_components/image_controls.py
 """
-The image generation panels for the asgram PySide6 app.
+The image generation panels for the asgram PySide6 app. Establishes the image
+processing pipeline.
 
 Run this module with python -m asgram.gui.pyside_components.image_controls
 """
 
 import sys
 from PIL import Image
-from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QGroupBox, QVBoxLayout, QHBoxLayout, QScrollArea,
     QLabel, QFileDialog, QPushButton
 )
 try:
-    from asgram.gui.pyside_components.param_controls import ParameterState
+    from asgram.gui.pyside_components.param_state import ParameterState
+    from asgram.gui.pyside_components.pil_wrap import pil_to_pixmap, blank_pil
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SrcPat
     from asgram.art import synthesizer
     from asgram.postprocessing import finish
 except ModuleNotFoundError:
-    from gui.pyside_components.param_controls import ParameterState
+    from gui.pyside_components.param_state import ParameterState
+    from gui.pyside_components.pil_wrap import pil_to_pixmap, blank_pil
     from depth_map_making import ZMap
     from source_pattern_making import SrcPat
     from art import synthesizer
     from postprocessing import finish
-
-
-# image helpers
-DEFAULT_DISPLAY_WIDTH = 1024
-DEFAULT_DISPLAY_HEIGHT = 768
-
-
-def pil_to_pixmap(_img: Image.Image, size='s'):
-    """For displaying PIL outputs from asgram in a PySide6 window."""
-    small = 's' == size
-    max_w = DEFAULT_DISPLAY_WIDTH // 2 if small else DEFAULT_DISPLAY_WIDTH
-    max_h = DEFAULT_DISPLAY_HEIGHT // 2 if small else DEFAULT_DISPLAY_HEIGHT
-
-    rgb_img = _img.convert('RGB')
-    w, h, = rgb_img.size
-    if max_w < w:
-        rgb_img = rgb_img.resize((max_w, int(round(max_w / w * h))))
-        w, h, = rgb_img.size
-    if max_h < h:
-        rgb_img = rgb_img.resize((int(round(max_h / h * w)), max_h))
-        w, h, = rgb_img.size
-
-    bytes_per_line = 3 * w
-    return QPixmap.fromImage(QImage(
-        rgb_img.tobytes('raw', 'RGB'),
-        w, h, bytes_per_line, QImage.Format.Format_RGB888
-    ))
-
-
-def blank_pil():
-    return Image.new('RGB', (DEFAULT_DISPLAY_WIDTH, DEFAULT_DISPLAY_HEIGHT))
 
 
 # image control widget
