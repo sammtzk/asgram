@@ -3,7 +3,6 @@
 Functions for making polished single image stereograms.
 """
 
-import numpy as np
 from PIL import Image
 try:
     from asgram.algorithm import _asg_row
@@ -81,7 +80,7 @@ def asgram(
     src, ref=None, rfit='fit',
     mu=1/3, dpi=72, cross=False, approach='rl',
     normalize=True, invert=False, iis=False, bil=False, pad=False, scale=1.0,
-    rpal='bw', random_seed=1132,
+    rpal='bw', rseed=1132,
     pdvrs=False, dot_depth=0.0, dot_height='bottom',
     num_jobs=8
 ):
@@ -91,13 +90,9 @@ def asgram(
     Original Single Image Random Dot Stereogram algorithm described by
     Thimbleby, Inglis, & Witten (1994), adapted to Python.
     """
-    np.random.seed(random_seed)
     _zm = ZMap(src, mu, dpi, scale, iis, bil, invert, normalize, pad, num_jobs)
-    np.random.seed(random_seed)
-    _sp = SrcPat(_zm.size, ref, cross, mu, dpi, rfit, approach, rpal)
-    np.random.seed(random_seed)
+    _sp = SrcPat(_zm.size, ref, cross, mu, dpi, rfit, approach, rpal, rseed)
     asg = synthesizer(_zm, _sp, mu, dpi, cross, approach, num_jobs)
-    np.random.seed(random_seed)
     asg = finish(asg, dot_depth, dot_height, mu, dpi, cross, pdvrs, num_jobs)
 
     return Image.fromarray(asg.T)

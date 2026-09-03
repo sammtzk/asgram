@@ -12,7 +12,6 @@ from ipywidgets import (
 from ipyfilechooser import FileChooser
 from IPython.display import display
 from IPython.display import Image as IPyImage
-import numpy as np
 from PIL import Image
 from matplotlib import colormaps
 try:
@@ -125,7 +124,6 @@ def asgram_widgets():
                 src_img = Image.open(BytesIO(img_upload.value[0].content))
             nonlocal _zmap
 
-            np.random.seed(random_seed.value)
             with zm_output:
                 _zmap = ZMap(
                     src_img,
@@ -206,7 +204,6 @@ def asgram_widgets():
                 ref = None
             nonlocal _srcpat
 
-            np.random.seed(random_seed.value)
             with sp_output:
                 _srcpat = SrcPat(
                     _zmap.size,
@@ -216,7 +213,8 @@ def asgram_widgets():
                     dpi.value,
                     rfit.value,
                     approach.value,
-                    rpal.value
+                    rpal.value,
+                    random_seed.value
                 )
             sp_output.clear_output(wait=True)
 
@@ -252,7 +250,6 @@ def asgram_widgets():
         if (_zmap is not None) and (_srcpat is not None):
             nonlocal _asg
 
-            np.random.seed(random_seed.value)
             with asg_output:
                 _asg = synthesizer(
                     _zmap,
@@ -313,7 +310,6 @@ def asgram_widgets():
         if _asg is not None:
             nonlocal _final
 
-            np.random.seed(random_seed.value)
             with final_output:
                 _final = Image.fromarray(finish(
                     _asg,

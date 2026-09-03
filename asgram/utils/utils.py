@@ -38,7 +38,7 @@ class AllParameters():
     # image pattern
     pattern_fit: str = 'fit'                    # rfit
     random_pattern_palette: str = 'bw'          # rpal
-    random_seed: int = 1132                     # random_seed
+    random_seed: int = 1132                     # rseed
 
     # postprocessing
     pixel_disparity_smoothing: bool = False     # pdvrs

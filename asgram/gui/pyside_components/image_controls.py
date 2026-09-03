@@ -159,7 +159,8 @@ class ImageControl(QGroupBox):
                 dpi=params.dots_per_inch,
                 fit=params.pattern_fit,
                 approach=params.constraint_approach,
-                random_palette=params.random_pattern_palette
+                random_palette=params.random_pattern_palette,
+                random_seed=params.random_seed
             )
             self.spm_image.setPixmap(pil_to_pixmap(self.spat_instance.sp_img))
         self.spm_dims.setText(self._spat_instance_dims_display())

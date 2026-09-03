@@ -128,7 +128,7 @@ class SrcPat:
     def __init__(
             self, size, ref=None, cross_eyed=False,
             mu=1/3, dpi=72, fit='fit', approach='rl',
-            random_palette='bw'
+            random_palette='bw', random_seed=1132
     ):
         self.size = size
         self.ref = ref
@@ -143,6 +143,7 @@ class SrcPat:
 
         self.sp_arr = np.array([])
         self.sp_img = Image.new('1', (0, 0))
+        np.random.seed(random_seed)
         self.update()
 
     def update(self):
