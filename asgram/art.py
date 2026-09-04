@@ -3,9 +3,10 @@
 Functions for making polished single image stereograms.
 """
 
+import numpy as np
 from PIL import Image
 try:
-    from asgram.algorithm import _asg_row
+    from asgram.algorithm import _dsdsc
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SrcPat
     from asgram.postprocessing import finish
@@ -13,7 +14,7 @@ try:
         worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
-    from algorithm import _asg_row
+    from algorithm import _dsdsc
     from depth_map_making import ZMap
     from source_pattern_making import SrcPat
     from postprocessing import finish
@@ -27,11 +28,10 @@ def _synth_worker(_args):
     ys_to_build, args_dict = _args
 
     def _row_func_wrapper(y, ad=args_dict):
-        """Wrapper for _asg_row."""
-        return _asg_row(
-            asg=ad['src_mat'],
+        """Wrapper for _dsdsc."""
+        return _dsdsc(
             y=y,
-            zar=ad['zar'],
+            zar=ad['src_mat'],
             _re=ad['_re'],
             mu=ad['mu'],
             dpi=ad['dpi'],
@@ -39,7 +39,7 @@ def _synth_worker(_args):
             approach=ad['approach']
         )
 
-    return run_worker(ys_to_build, args_dict, _row_func_wrapper, dim=3)
+    return run_worker(ys_to_build, args_dict, _row_func_wrapper, 2, np.uint16)
 
 
 def synthesizer(
@@ -51,26 +51,25 @@ def synthesizer(
     print("Step: Constraint Building")
     zar = zmap.zm_arr
     _re = sp.ref is not None
-    asg = sp.sp_arr
 
     jobs = worker_count(num_jobs)
     if 1 < jobs:
         args_dict = {
-            'src_mat': asg,
+            'src_mat': zar,
             'total_ys': zar.shape[1],
-            'zar': zar,
             '_re': _re,
             'mu': mu,
             'dpi': dpi,
             'cross': cross,
             'approach': approach
         }
-        asg = parallelize_workers(args_dict, _synth_worker, jobs)
+        con = parallelize_workers(args_dict, _synth_worker, jobs, np.uint16)
     else:
+        con = np.zeros_like(zar, dtype=np.uint16)
         for y in range(zar.shape[1]):
-            asg[:, :, y] = _asg_row(
-                asg, y, zar, _re, mu, dpi, cross, approach
-            )
+            con[:, y] = _dsdsc(y, zar, _re, mu, dpi, cross, approach)
+
+    asg = np.take_along_axis(sp.sp_arr, con[None, :, :], axis=1)
 
     print("Complete.")
     return asg

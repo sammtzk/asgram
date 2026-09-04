@@ -42,11 +42,11 @@ def worker_init(shared_counter, shared_lock, shared_stop_event):
 # total_ys (total number of output matrix rows)
 
 
-def run_worker(ys_to_build, args_dict, spec_row_func, dim=3):
+def run_worker(ys_to_build, args_dict, spec_row_func, dim=3, dtype=None):
     """Handle parallelization states for specialized workers."""
     total = len(ys_to_build)
     prog = int(np.ceil(total / UPDATE_COUNTER))
-    build_mat = np.zeros_like(args_dict['src_mat'])
+    build_mat = np.zeros_like(args_dict['src_mat'], dtype=dtype)
 
     for i, y, in enumerate(ys_to_build):
         if dim == 2:
@@ -63,7 +63,7 @@ def run_worker(ys_to_build, args_dict, spec_row_func, dim=3):
     return build_mat
 
 
-def parallelize_workers(args_dict, spec_worker_func, processes):
+def parallelize_workers(args_dict, spec_worker_func, processes, dtype=None):
     """
     Generic framework for parallelizing iterative matrix-building processes
     using multiprocessing. Also allows for early stopping, and prints progress
@@ -108,7 +108,7 @@ def parallelize_workers(args_dict, spec_worker_func, processes):
             results = async_results.get()
             progress_bar(total_ys - 1, total_ys)
 
-    output_matrix = np.zeros_like(args_dict['src_mat'])
+    output_matrix = np.zeros_like(args_dict['src_mat'], dtype=dtype)
     for r in results:
         if r is not None:
             output_matrix += r

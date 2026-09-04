@@ -203,19 +203,4 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
 
     if _re:
         pixel_map.shift_oos_roots(zar[:, y])
-    return pixel_map.constraints
-
-
-def _build_row_vectorized(asg_row, constraints):
-    constraints = np.asarray(constraints)
-    pointers = (constraints != np.arange(constraints.size))
-    asg_row[:, pointers] = asg_row[:, constraints[pointers]]
-    return asg_row
-
-
-def _asg_row(
-    asg, y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'
-):
-    asg_row = asg[:, :, y]
-    constraints = _dsdsc(y, zar, _re, mu, dpi, cross_eyed, approach)
-    return _build_row_vectorized(asg_row, constraints)
+    return np.asarray(pixel_map.constraints, dtype=np.uint16)
