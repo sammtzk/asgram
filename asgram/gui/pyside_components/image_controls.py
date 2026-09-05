@@ -6,6 +6,7 @@ processing pipeline.
 Run this module with python -m asgram.gui.pyside_components.image_controls
 """
 
+import os
 import sys
 from PIL import Image
 from PySide6.QtWidgets import (
@@ -17,15 +18,15 @@ try:
     from asgram.gui.pyside_components.pil_wrap import pil_to_pixmap, blank_pil
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SrcPat
-    from asgram.art import synthesizer
-    from asgram.postprocessing import finish
+    from asgram.pixel_constraint_calculating import PixCon
+    from asgram.postprocessing import Post
 except ModuleNotFoundError:
     from gui.pyside_components.param_state import ParameterState
     from gui.pyside_components.pil_wrap import pil_to_pixmap, blank_pil
     from depth_map_making import ZMap
     from source_pattern_making import SrcPat
-    from art import synthesizer
-    from postprocessing import finish
+    from pixel_constraint_calculating import PixCon
+    from postprocessing import Post
 
 
 # image control widget
@@ -45,16 +46,17 @@ class ImageControl(QGroupBox):
         self.source_pattern_path = None
         self.spat_instance = None
 
-        self.asgram_mat = None
-        self.asgram_pil = None
-
-        self.final_output = None
+        self.pixcon_instance = None
+        self.post_instance = None
 
         self._gui_init()
 
     # depth map processing ====================================================
     def _zmap_path_display(self):
-        return f"Selected File: {self.depth_map_path}"
+        _text = self.depth_map_path
+        if _text is not None:
+            _text = os.path.basename(_text)
+        return f"Selected File: {_text}"
 
     def _zmap_instance_dims_display(self):
         if self.zmap_instance is not None:
@@ -111,7 +113,10 @@ class ImageControl(QGroupBox):
 
     # source pattern processing ===============================================
     def _spat_path_display(self):
-        return f"Selected File: {self.source_pattern_path}"
+        _text = self.source_pattern_path
+        if _text is not None:
+            _text = os.path.basename(_text)
+        return f"Selected File: {_text}"
 
     def _spat_instance_dims_display(self):
         if self.spat_instance is not None and self.zmap_instance is not None:
@@ -176,10 +181,10 @@ class ImageControl(QGroupBox):
 
     # asgram constraints generation ===========================================
     def _constraints_generation(self):
-        """Wraps synthesizer to use shared parameter state."""
+        """Wraps PixCon to use shared parameter state."""
         if self.zmap_instance is not None and self.spat_instance is not None:
             params = self.manager.config
-            self.asgram_mat = synthesizer(
+            self.pixcon_instance = PixCon(
                 zmap=self.zmap_instance,
                 sp=self.spat_instance,
                 mu=params.depth_of_field,
@@ -188,25 +193,25 @@ class ImageControl(QGroupBox):
                 approach=params.constraint_approach,
                 num_jobs=params.parallelization_cores
             )
-            self.asgram_pil = Image.fromarray(self.asgram_mat.T)
-            self.asg_image.setPixmap(pil_to_pixmap(self.asgram_pil, 'l'))
+            self.con_image.setPixmap(
+                pil_to_pixmap(self.pixcon_instance.con_img)
+            )
 
     def _clear_constraints(self):
-        self.asgram_mat = None
-        self.asgram_pil = None
-        self.asg_image.setPixmap(pil_to_pixmap(blank_pil(), 'l'))
+        self.pixcon_instance = None
+        self.con_image.setPixmap(pil_to_pixmap(blank_pil()))
 
-    def _view_asg_pil(self):
-        if self.asgram_pil is not None:
-            self.asgram_pil.show()
+    def _view_con_pil(self):
+        if self.pixcon_instance is not None:
+            self.pixcon_instance.con_img.show()
 
     # asgram postprocessing and finalization ==================================
     def _finalize_asgram(self):
         """Wraps finish to use shared parameter state."""
-        if self.asgram_mat is not None:
+        if self.pixcon_instance is not None:
             params = self.manager.config
-            self.final_output = Image.fromarray(finish(
-                asg=self.asgram_mat,
+            self.post_instance = Post(
+                pc=self.pixcon_instance,
                 depth=params.convergence_dot_depth,
                 height=params.convergence_dot_placement,
                 mu=params.depth_of_field,
@@ -214,16 +219,18 @@ class ImageControl(QGroupBox):
                 cross=params.cross_view_flag,
                 pdvrs=params.pixel_disparity_smoothing,
                 num_jobs=params.parallelization_cores
-            ).T)
-            self.fin_image.setPixmap(pil_to_pixmap(self.final_output, 'l'))
+            )
+            self.fin_image.setPixmap(
+                pil_to_pixmap(self.post_instance.final_img, 'l')
+            )
 
     def _clear_final(self):
-        self.final_output = None
+        self.post_instance = None
         self.fin_image.setPixmap(pil_to_pixmap(blank_pil(), 'l'))
 
     def _view_fin_pil(self):
-        if self.final_output is not None:
-            self.final_output.show()
+        if self.post_instance is not None:
+            self.post_instance.final_img.show()
 
     # layout ==================================================================
     def _gui_init(self):
@@ -310,27 +317,27 @@ class ImageControl(QGroupBox):
         src_pat_processing_group.setLayout(src_pat_processing_layout)
 
         # constraints generation (asgram algorithm) ===========================
-        asgram_processing_group = QGroupBox("Constraints Generation")
-        asgram_processing_layout = QVBoxLayout()
+        pixcon_processing_group = QGroupBox("Pixel Constraint Calculating")
+        pixcon_processing_layout = QVBoxLayout()
 
-        self.asg = QPushButton("Generate ASGRAM Constraints")
-        self.asg_clear = QPushButton("Clear ASGRAM Constraints")
-        self.asg_image = QLabel()
-        self.asg_image.setPixmap(pil_to_pixmap(blank_pil(), 'l'))
-        self.asg_pil_viewer = QPushButton("View PIL Output")
+        self.con = QPushButton("Generate ASGRAM Constraints")
+        self.con_clear = QPushButton("Clear ASGRAM Constraints")
+        self.con_image = QLabel()
+        self.con_image.setPixmap(pil_to_pixmap(blank_pil()))
+        self.con_pil_viewer = QPushButton("View PIL Output")
 
-        self.asg.clicked.connect(self._constraints_generation)
-        self.asg_clear.clicked.connect(self._clear_constraints)
-        self.asg_pil_viewer.clicked.connect(self._view_asg_pil)
+        self.con.clicked.connect(self._constraints_generation)
+        self.con_clear.clicked.connect(self._clear_constraints)
+        self.con_pil_viewer.clicked.connect(self._view_con_pil)
 
-        self.asg_buttons = QHBoxLayout()
-        self.asg_buttons.addWidget(self.asg)
-        self.asg_buttons.addWidget(self.asg_clear)
-        asgram_processing_layout.addLayout(self.asg_buttons)
-        asgram_processing_layout.addWidget(self.asg_image)
-        asgram_processing_layout.addWidget(self.asg_pil_viewer)
+        self.con_buttons = QHBoxLayout()
+        self.con_buttons.addWidget(self.con)
+        self.con_buttons.addWidget(self.con_clear)
+        pixcon_processing_layout.addLayout(self.con_buttons)
+        pixcon_processing_layout.addWidget(self.con_image)
+        pixcon_processing_layout.addWidget(self.con_pil_viewer)
 
-        asgram_processing_group.setLayout(asgram_processing_layout)
+        pixcon_processing_group.setLayout(pixcon_processing_layout)
 
         # finalize asgram (postprocessing) ====================================
         final_processing_group = QGroupBox("Postprocessing")
@@ -361,9 +368,9 @@ class ImageControl(QGroupBox):
         top_layout = QHBoxLayout()
         top_layout.addWidget(depth_map_processing_group)
         top_layout.addWidget(src_pat_processing_group)
+        top_layout.addWidget(pixcon_processing_group)
 
         main_layout.addLayout(top_layout)
-        main_layout.addWidget(asgram_processing_group)
         main_layout.addWidget(final_processing_group)
 
 

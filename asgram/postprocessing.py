@@ -5,13 +5,16 @@ Functions for cleaning up autostereograms and adding convergence helpers.
 
 import copy
 import numpy as np
+from PIL import Image
 try:
     from asgram.utils.utils import _pixel_separation
+    from asgram.pixel_constraint_calculating import PixCon
     from asgram.utils.parallelize import (
             worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
     from utils.utils import _pixel_separation
+    from pixel_constraint_calculating import PixCon
     from utils.parallelize import (
             worker_count, run_worker, parallelize_workers
     )
@@ -33,8 +36,8 @@ def _redmean_color_diff(color1, color2):
     return np.sqrt(rw * drs + gw * dgs + bw * dbs)
 
 
-def _row_pdvrpp(asg_row, thresh=25):
-    """Pixel Disparity Visual Rectification Post-Processing"""
+def _row_pdvrp(asg_row, thresh=25):
+    """Pixel Disparity Visual Rectification Postprocessing"""
     for inner_idx in np.arange(0 + 1, asg_row.shape[1] - 1):
         target_pixel = asg_row[:, inner_idx].astype(float)
         left_pixel = asg_row[:, inner_idx + 1].astype(float)
@@ -52,31 +55,31 @@ def _row_pdvrpp(asg_row, thresh=25):
     return asg_row
 
 
-def _pdvrpp_worker(_args):
-    """Worker for pdvrpp parallelization. Wraps generic run_worker."""
+def _pdvrp_worker(_args):
+    """Worker for pdvrp parallelization. Wraps generic run_worker."""
     ys_to_build, args_dict = _args
 
     def _row_func_wrapper(y, ad=args_dict):
         """Wrapper for _row_pdvrpp."""
-        return _row_pdvrpp(asg_row=ad['src_mat'][:, :, y])
+        return _row_pdvrp(asg_row=ad['src_mat'][:, :, y])
 
     return run_worker(ys_to_build, args_dict, _row_func_wrapper, dim=3)
 
 
-def pdvrpp(asg, thresh=25, num_jobs=-1):
-    """Pixel Disparity Visual Rectification Post-Processing."""
+def pdvrp(asg, thresh=25, num_jobs=-1):
+    """Pixel Disparity Visual Rectification Postprocessing."""
     jobs = worker_count(num_jobs)
     if 1 < jobs:
         args_dict = {'src_mat': asg, 'total_ys': asg.shape[2]}
-        asg = parallelize_workers(args_dict, _pdvrpp_worker, jobs)
+        asg = parallelize_workers(args_dict, _pdvrp_worker, jobs)
     else:
         for y in range(asg.shape[2]):
-            asg[:, :, y] = _row_pdvrpp(asg[:, :, y], thresh)
+            asg[:, :, y] = _row_pdvrp(asg[:, :, y], thresh)
 
     return asg
 
 
-def conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
+def dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
     """
     By default draws dots at the far plane. A depth value of 1 will draw at the
     near plane. Values outside of [0, 1] will not draw.
@@ -116,14 +119,35 @@ def conv_dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
     return asg
 
 
-def finish(
-        asg,
-        depth, height='bottom', mu=1/3, dpi=72, cross=False,
-        pdvrs=False, num_jobs=-1
-):
-    """Combines module postprocessing helpers into one function."""
-    print("Step: Postprocessing")
-    asg = pdvrpp(asg, num_jobs=num_jobs) if pdvrs else asg
-    asg = conv_dots(asg, depth, height, mu, dpi, cross)
-    print("Complete.")
-    return asg
+class Post():
+    """Finalizes autostereograms with postprocessing techinques."""
+
+    def __init__(
+            self, pc: PixCon,
+            depth=0.0, height='bottom', mu=1/3, dpi=72, cross=False,
+            pdvrs=False, num_jobs=-1
+    ):
+        self.pc = pc
+
+        self.depth = depth
+        self.height = height
+        self.mu = mu
+        self.dpi = dpi
+        self.cross = cross
+
+        self.pdvrs = pdvrs
+        self.num_jobs = num_jobs
+
+        self.final_arr = np.array([])
+        self.final_img = Image.new('1', (0, 0))
+        self.update()
+
+    def update(self):
+        """Updates the final autostereogram according to class parameters."""
+        print("Step: Postprocessing")
+        fin = self.pc.asg_mat
+        fin = pdvrp(fin, num_jobs=self.num_jobs) if self.pdvrs else fin
+        fin = dots(fin, self.depth, self.height, self.mu, self.dpi, self.cross)
+        self.final_arr = fin
+        self.final_img = Image.fromarray(fin.T)
+        print("Complete.")

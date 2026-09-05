@@ -14,8 +14,8 @@ DEFAULT_DISPLAY_HEIGHT = 768
 def pil_to_pixmap(_img: Image.Image, size='s'):
     """For displaying PIL outputs from asgram in a PySide6 window."""
     small = 's' == size
-    max_w = DEFAULT_DISPLAY_WIDTH // 2 if small else DEFAULT_DISPLAY_WIDTH
-    max_h = DEFAULT_DISPLAY_HEIGHT // 2 if small else DEFAULT_DISPLAY_HEIGHT
+    max_w = DEFAULT_DISPLAY_WIDTH // 4 if small else DEFAULT_DISPLAY_WIDTH
+    max_h = DEFAULT_DISPLAY_HEIGHT // 4 if small else DEFAULT_DISPLAY_HEIGHT
 
     rgb_img = _img.convert('RGB')
     w, h, = rgb_img.size

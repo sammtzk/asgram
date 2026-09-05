@@ -17,13 +17,13 @@ from matplotlib import colormaps
 try:
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SrcPat
-    from asgram.art import synthesizer
-    from asgram.postprocessing import finish
+    from asgram.pixel_constraint_calculating import PixCon
+    from asgram.postprocessing import Post
 except ModuleNotFoundError:
     from depth_map_making import ZMap
     from source_pattern_making import SrcPat
-    from art import synthesizer
-    from postprocessing import finish
+    from pixel_constraint_calculating import PixCon
+    from postprocessing import Post
 
 
 def asgram_widgets():
@@ -36,7 +36,7 @@ def asgram_widgets():
     """
     _zmap = None
     _srcpat = None
-    _asg = None
+    _pixcon = None
     _final = None
 
     # General Widgets
@@ -241,17 +241,17 @@ def asgram_widgets():
 
     # Autostereogram Widgets
     asg_make = Button(
-        description='Make Autostereogram', disabled=False
+        description='Make Pixel Constraints', disabled=False
     )
     asg_output = Output()
 
     def _asg_make_clicked(b):
         _ = b
         if (_zmap is not None) and (_srcpat is not None):
-            nonlocal _asg
+            nonlocal _pixcon
 
             with asg_output:
-                _asg = synthesizer(
+                _pixcon = PixCon(
                     _zmap,
                     _srcpat,
                     mu.value,
@@ -263,7 +263,7 @@ def asgram_widgets():
             asg_output.clear_output(wait=True)
 
             _buffer = BytesIO()
-            Image.fromarray(_asg.T).convert('RGB').save(_buffer, format='PNG')
+            _pixcon.con_img.convert('RGB').save(_buffer, format='PNG')
             with asg_output:
                 display(IPyImage(_buffer.getvalue()))
 
@@ -279,7 +279,7 @@ def asgram_widgets():
     asg_make.on_click(_asg_make_clicked)
 
     aw = VBox([
-        HTML('<b>Autostereogram Building<b>'),
+        HTML('<b>Pixel Constraint Calculating<b>'),
         asg_make,
         asg_output
     ])
@@ -307,12 +307,12 @@ def asgram_widgets():
 
     def _final_make_clicked(b):
         _ = b
-        if _asg is not None:
+        if _pixcon is not None:
             nonlocal _final
 
             with final_output:
-                _final = Image.fromarray(finish(
-                    _asg,
+                _post = Post(
+                    _pixcon,
                     dot_depth.value,
                     dot_height.value,
                     mu.value,
@@ -320,7 +320,8 @@ def asgram_widgets():
                     cross.value,
                     pdvrs.value,
                     num_jobs.value
-                ).T)
+                )
+                _final = _post.final_img
             final_output.clear_output(wait=True)
 
             _buffer = BytesIO()

@@ -36,7 +36,7 @@ class ASGRAM(QMainWindow):
         self.param_scroll = QScrollArea()
         self.param_scroll.setWidgetResizable(True)
         self.param_scroll.setWidget(self.param_widget)
-        self.param_scroll.setMaximumWidth(314)
+        self.param_scroll.setMaximumWidth(456)
 
         self.image_widget = ImageControl(self.shared_params)
         self.image_scroll = QScrollArea()

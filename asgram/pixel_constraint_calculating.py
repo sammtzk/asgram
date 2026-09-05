@@ -1,15 +1,26 @@
-# asgram/algorithm.py
+# asgram/pixel_constraint_calculating.py
 """
 Constraint building algorithms for the creation of autostereograms.
 """
 
 import numpy as np
+from PIL import Image
 try:
     from asgram.utils.tiw import _do_work
     from asgram.utils.utils import _pixel_separation
+    from asgram.depth_map_making import _normalize_img_array, ZMap
+    from asgram.source_pattern_making import SrcPat
+    from asgram.utils.parallelize import (
+        worker_count, run_worker, parallelize_workers
+    )
 except ModuleNotFoundError:
     from utils.tiw import _do_work
     from utils.utils import _pixel_separation
+    from depth_map_making import _normalize_img_array, ZMap
+    from source_pattern_making import SrcPat
+    from utils.parallelize import (
+        worker_count, run_worker, parallelize_workers
+    )
 
 
 class DisjointSet:
@@ -204,3 +215,98 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
     if _re:
         pixel_map.shift_oos_roots(zar[:, y])
     return np.asarray(pixel_map.constraints, dtype=np.uint16)
+
+
+def _pixcon_worker(_args):
+    """Worker for PixCon parallelization. Wraps generic run_worker."""
+    ys_to_build, args_dict = _args
+
+    def _row_func_wrapper(y, ad=args_dict):
+        """Wrapper for _dsdsc."""
+        return _dsdsc(
+            y=y,
+            zar=ad['src_mat'],
+            _re=ad['_re'],
+            mu=ad['mu'],
+            dpi=ad['dpi'],
+            cross_eyed=ad['cross'],
+            approach=ad['approach']
+        )
+
+    return run_worker(ys_to_build, args_dict, _row_func_wrapper, 2, np.uint16)
+
+
+class PixCon:
+    """Calculates and stores pixel constraints for autostereograms."""
+
+    def __init__(
+            self, zmap: ZMap, sp: SrcPat,
+            mu=1/3, dpi=72, cross=False, approach='rl', num_jobs=8
+    ):
+        self.zmap = zmap
+        self.sp = sp
+
+        self.mu = mu
+        self.dpi = dpi
+        self.cross = cross
+        self.approach = approach
+        self.num_jobs = num_jobs
+
+        self.con_mat = np.array([])
+        self.con_img = Image.new('1', (0, 0))
+        self.asg_mat = np.array([])
+        self.asg_img = Image.new('1', (0, 0))
+        self.update()
+
+    @property
+    def zar(self):
+        return self.zmap.zm_arr
+
+    @property
+    def total_ys(self):
+        return self.zmap.zm_arr.shape[1]
+
+    @property
+    def _sp(self):
+        return self.sp.sp_arr
+
+    @property
+    def _re(self):
+        return self.sp.ref is not None
+
+    @property
+    def args_dict(self):
+        return {
+            'src_mat': self.zar,
+            'total_ys': self.total_ys,
+            '_re': self._re,
+            'mu': self.mu,
+            'dpi': self.dpi,
+            'cross': self.cross,
+            'approach': self.approach
+        }
+
+    def _img_updates(self, pc):
+        self.con_mat = pc
+        self.con_img = Image.fromarray(_normalize_img_array(pc).T * 255.0)
+        self.asg_mat = np.take_along_axis(self._sp, pc[None, :, :], axis=1)
+        self.asg_img = Image.fromarray(self.asg_mat.T)
+
+    def update(self):
+        """Updates the pixel constraints according to class parameters."""
+        print("Step: Pixel Constraint Calculating")
+        jobs = worker_count(self.num_jobs)
+        if 1 < jobs:
+            con = parallelize_workers(
+                self.args_dict, _pixcon_worker, jobs, np.uint16
+            )
+        else:
+            con = np.zeros_like(self.zar, dtype=np.uint16)
+            for y in range(self.total_ys):
+                con[:, y] = _dsdsc(
+                    y, self.zar, self._re,
+                    self.mu, self.dpi, self.cross, self.approach
+                )
+
+        self._img_updates(con)
+        print("Complete.")
