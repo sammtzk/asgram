@@ -149,5 +149,18 @@ class Post():
         fin = pdvrp(fin, num_jobs=self.num_jobs) if self.pdvrs else fin
         fin = dots(fin, self.depth, self.height, self.mu, self.dpi, self.cross)
         self.final_arr = fin
-        self.final_img = Image.fromarray(fin.T)
+        self.final_img = Image.fromarray(fin.T).convert('RGB')
         print("Complete.")
+
+    def save(self, file_name='temp', dir_path='', extension='.png'):
+        """
+        Saves final asgram as an image of a specified format.
+
+        Extension should be one of '.png', '.jpg', or '.jpeg'.
+        """
+        dir_path = dir_path + '/' if dir_path else dir_path
+        file_path = dir_path + file_name + extension
+
+        if extension in ('.png', '.jpg', '.jpeg'):
+            with open(file_path, 'wb') as f:
+                self.final_img.save(f)

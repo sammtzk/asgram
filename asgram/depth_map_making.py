@@ -215,5 +215,20 @@ class ZMap:
 
         self.size = zarr.shape
         self.zm_arr = zarr
-        self.zm_img = Image.fromarray(zarr.T * 255.0)
+        self.zm_img = Image.fromarray(zarr.T * 255.0).convert('L')
         print("Complete.")
+
+    def save(self, file_name='temp', dir_path='', extension='.exr'):
+        """
+        Saves depth map as an image of a specified format.
+
+        If not '.exr', extension should be one of '.png', '.jpg', or '.jpeg'.
+        """
+        dir_path = dir_path + '/' if dir_path else dir_path
+        file_path = dir_path + file_name + extension
+
+        if '.exr' == extension:
+            openexr_numpy.imwrite(file_path, self.zm_arr.T, channel_names='V')
+        elif extension in ('.png', '.jpg', '.jpeg'):
+            with open(file_path, 'wb') as f:
+                self.zm_img.save(f)

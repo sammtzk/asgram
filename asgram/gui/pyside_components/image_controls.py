@@ -111,6 +111,18 @@ class ImageControl(QGroupBox):
         if self.zmap_instance is not None:
             self.zmap_instance.zm_img.show()
 
+    def _save_zmap(self):
+        if self.zmap_instance is not None:
+            zmap_path, _ = QFileDialog.getSaveFileName(
+                parent=self, caption="Save Depth Map", dir="",
+                filter="PNG Files (*.png);;JPEG Files (*.jpg *.jpeg);;EXR Files (*.exr)"  # noqa E501
+            )
+
+            if zmap_path:
+                save_dir, save_file = os.path.split(zmap_path)
+                file_name, extension = os.path.splitext(save_file)
+                self.zmap_instance.save(file_name, save_dir, extension)
+
     # source pattern processing ===============================================
     def _spat_path_display(self):
         _text = self.source_pattern_path
@@ -179,6 +191,18 @@ class ImageControl(QGroupBox):
         if self.spat_instance is not None:
             self.spat_instance.sp_img.show()
 
+    def _save_spat(self):
+        if self.spat_instance is not None:
+            spat_path, _ = QFileDialog.getSaveFileName(
+                parent=self, caption="Save Source Pattern", dir="",
+                filter="PNG Files (*.png);;JPEG Files (*.jpg *.jpeg)"
+            )
+
+            if spat_path:
+                save_dir, save_file = os.path.split(spat_path)
+                file_name, extension = os.path.splitext(save_file)
+                self.spat_instance.save(file_name, save_dir, extension)
+
     # asgram constraints generation ===========================================
     def _constraints_generation(self):
         """Wraps PixCon to use shared parameter state."""
@@ -204,6 +228,18 @@ class ImageControl(QGroupBox):
     def _view_con_pil(self):
         if self.pixcon_instance is not None:
             self.pixcon_instance.con_img.show()
+
+    def _save_constraints(self):
+        if self.pixcon_instance is not None:
+            con_path, _ = QFileDialog.getSaveFileName(
+                parent=self, caption="Save Pixel Constraints (Matrix + JSON)",
+                dir="", filter="NumPy Files (*.npy)"
+            )
+
+            if con_path:
+                save_dir, save_file = os.path.split(con_path)
+                file_name, _ = os.path.splitext(save_file)
+                self.pixcon_instance.save(file_name, save_dir)
 
     # asgram postprocessing and finalization ==================================
     def _finalize_asgram(self):
@@ -232,6 +268,18 @@ class ImageControl(QGroupBox):
         if self.post_instance is not None:
             self.post_instance.final_img.show()
 
+    def _save_final(self):
+        if self.post_instance is not None:
+            final_path, _ = QFileDialog.getSaveFileName(
+                parent=self, caption="Save Final ASGRAM", dir="",
+                filter="PNG Files (*.png);;JPEG Files (*.jpg *.jpeg)"
+            )
+
+            if final_path:
+                save_dir, save_file = os.path.split(final_path)
+                file_name, extension = os.path.splitext(save_file)
+                self.post_instance.save(file_name, save_dir, extension)
+
     # layout ==================================================================
     def _gui_init(self):
         # start depth map processing ==========================================
@@ -258,11 +306,9 @@ class ImageControl(QGroupBox):
         self.dmm_dims = QLabel(self._zmap_instance_dims_display())
         self.dmm_image = QLabel()
         self.dmm_image.setPixmap(pil_to_pixmap(blank_pil()))
-        self.dmm_pil_viewer = QPushButton("View PIL Output")
 
         self.dmm.clicked.connect(self._depth_map_making)
         self.dmm_clear.clicked.connect(self._clear_zmap_instance)
-        self.dmm_pil_viewer.clicked.connect(self._view_zmap_pil)
 
         self.dmm_buttons = QHBoxLayout()
         self.dmm_buttons.addWidget(self.dmm)
@@ -270,7 +316,18 @@ class ImageControl(QGroupBox):
         depth_map_processing_layout.addLayout(self.dmm_buttons)
         depth_map_processing_layout.addWidget(self.dmm_dims)
         depth_map_processing_layout.addWidget(self.dmm_image)
-        depth_map_processing_layout.addWidget(self.dmm_pil_viewer)
+
+        # depth map saving
+        self.dms_pil_viewer = QPushButton("View PIL Output")
+        self.dms_save_zmap = QPushButton("Save Depth Map")
+
+        self.dms_pil_viewer.clicked.connect(self._view_zmap_pil)
+        self.dms_save_zmap.clicked.connect(self._save_zmap)
+
+        self.dms_buttons = QHBoxLayout()
+        self.dms_buttons.addWidget(self.dms_pil_viewer)
+        self.dms_buttons.addWidget(self.dms_save_zmap)
+        depth_map_processing_layout.addLayout(self.dms_buttons)
 
         # end depth map processing
         depth_map_processing_group.setLayout(depth_map_processing_layout)
@@ -299,11 +356,9 @@ class ImageControl(QGroupBox):
         self.spm_dims = QLabel(self._spat_instance_dims_display())
         self.spm_image = QLabel()
         self.spm_image.setPixmap(pil_to_pixmap(blank_pil()))
-        self.spm_pil_viewer = QPushButton("View PIL Output")
 
         self.spm.clicked.connect(self._source_pattern_making)
         self.spm_clear.clicked.connect(self._clear_spat_instance)
-        self.spm_pil_viewer.clicked.connect(self._view_spat_pil)
 
         self.spm_buttons = QHBoxLayout()
         self.spm_buttons.addWidget(self.spm)
@@ -311,7 +366,18 @@ class ImageControl(QGroupBox):
         src_pat_processing_layout.addLayout(self.spm_buttons)
         src_pat_processing_layout.addWidget(self.spm_dims)
         src_pat_processing_layout.addWidget(self.spm_image)
-        src_pat_processing_layout.addWidget(self.spm_pil_viewer)
+
+        # source pattern saving
+        self.sps_pil_viewer = QPushButton("View PIL Output")
+        self.sps_save_spat = QPushButton("Save Source Pattern")
+
+        self.sps_pil_viewer.clicked.connect(self._view_spat_pil)
+        self.sps_save_spat.clicked.connect(self._save_spat)
+
+        self.sps_buttons = QHBoxLayout()
+        self.sps_buttons.addWidget(self.sps_pil_viewer)
+        self.sps_buttons.addWidget(self.sps_save_spat)
+        src_pat_processing_layout.addLayout(self.sps_buttons)
 
         # end source pattern processing
         src_pat_processing_group.setLayout(src_pat_processing_layout)
@@ -320,22 +386,30 @@ class ImageControl(QGroupBox):
         pixcon_processing_group = QGroupBox("Pixel Constraint Calculating")
         pixcon_processing_layout = QVBoxLayout()
 
-        self.con = QPushButton("Generate ASGRAM Constraints")
-        self.con_clear = QPushButton("Clear ASGRAM Constraints")
+        self.con = QPushButton("Calculate Pixel Constraints")
+        self.con_clear = QPushButton("Clear Pixel Constraints")
         self.con_image = QLabel()
         self.con_image.setPixmap(pil_to_pixmap(blank_pil()))
         self.con_pil_viewer = QPushButton("View PIL Output")
+        self.con_save_pixcon = QPushButton("Save Pixel Constraints")
 
         self.con.clicked.connect(self._constraints_generation)
         self.con_clear.clicked.connect(self._clear_constraints)
         self.con_pil_viewer.clicked.connect(self._view_con_pil)
+        self.con_save_pixcon.clicked.connect(self._save_constraints)
 
+        pixcon_processing_layout.addWidget(QLabel())
+        pixcon_processing_layout.addWidget(QLabel())
         self.con_buttons = QHBoxLayout()
         self.con_buttons.addWidget(self.con)
         self.con_buttons.addWidget(self.con_clear)
         pixcon_processing_layout.addLayout(self.con_buttons)
+        pixcon_processing_layout.addWidget(QLabel())
         pixcon_processing_layout.addWidget(self.con_image)
-        pixcon_processing_layout.addWidget(self.con_pil_viewer)
+        self.pcs_buttons = QHBoxLayout()
+        self.pcs_buttons.addWidget(self.con_pil_viewer)
+        self.pcs_buttons.addWidget(self.con_save_pixcon)
+        pixcon_processing_layout.addLayout(self.pcs_buttons)
 
         pixcon_processing_group.setLayout(pixcon_processing_layout)
 
@@ -348,17 +422,22 @@ class ImageControl(QGroupBox):
         self.fin_image = QLabel()
         self.fin_image.setPixmap(pil_to_pixmap(blank_pil(), 'l'))
         self.fin_pil_viewer = QPushButton("View PIL Output")
+        self.fin_save_final = QPushButton("Save Final ASGRAM")
 
         self.fin.clicked.connect(self._finalize_asgram)
         self.fin_clear.clicked.connect(self._clear_final)
         self.fin_pil_viewer.clicked.connect(self._view_fin_pil)
+        self.fin_save_final.clicked.connect(self._save_final)
 
         self.fin_buttons = QHBoxLayout()
         self.fin_buttons.addWidget(self.fin)
         self.fin_buttons.addWidget(self.fin_clear)
         final_processing_layout.addLayout(self.fin_buttons)
         final_processing_layout.addWidget(self.fin_image)
-        final_processing_layout.addWidget(self.fin_pil_viewer)
+        self.fas_buttons = QHBoxLayout()
+        self.fas_buttons.addWidget(self.fin_pil_viewer)
+        self.fas_buttons.addWidget(self.fin_save_final)
+        final_processing_layout.addLayout(self.fas_buttons)
 
         final_processing_group.setLayout(final_processing_layout)
 

@@ -171,5 +171,18 @@ class SrcPat:
             ).transpose(2, 0, 1)
 
         self.sp_arr = asg
-        self.sp_img = Image.fromarray(asg.T)
+        self.sp_img = Image.fromarray(asg.T).convert('RGB')
         print("Complete.")
+
+    def save(self, file_name='temp', dir_path='', extension='.png'):
+        """
+        Saves pattern as an image of a specified format.
+
+        Extension should be one of '.png', '.jpg', or '.jpeg'.
+        """
+        dir_path = dir_path + '/' if dir_path else dir_path
+        file_path = dir_path + file_name + extension
+
+        if extension in ('.png', '.jpg', '.jpeg'):
+            with open(file_path, 'wb') as f:
+                self.sp_img.save(f)

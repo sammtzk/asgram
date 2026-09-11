@@ -3,6 +3,7 @@
 Constraint building algorithms for the creation of autostereograms.
 """
 
+import json
 import numpy as np
 from PIL import Image
 try:
@@ -288,9 +289,11 @@ class PixCon:
 
     def _img_updates(self, pc):
         self.con_mat = pc
-        self.con_img = Image.fromarray(_normalize_img_array(pc).T * 255.0)
+        self.con_img = Image.fromarray(
+            _normalize_img_array(pc).T * 255.0
+        ).convert('L')
         self.asg_mat = np.take_along_axis(self._sp, pc[None, :, :], axis=1)
-        self.asg_img = Image.fromarray(self.asg_mat.T)
+        self.asg_img = Image.fromarray(self.asg_mat.T).convert('RGB')
 
     def update(self):
         """Updates the pixel constraints according to class parameters."""
@@ -310,3 +313,32 @@ class PixCon:
 
         self._img_updates(con)
         print("Complete.")
+
+    def save(self, file_name='temp', dir_path=''):
+        """
+        Saves pixel constraint matrix and fundamental parameters.
+
+        Saves two files:
+            1. a .npy format Python pickle of self.con_mat
+            2. a .json of fundamental parameters with a file path to 1.
+
+        Both files must exist in order to synthesize new asgrams down the line.
+        """
+        dir_path = dir_path + '/' if dir_path else dir_path
+        file_path = dir_path + file_name
+        path1 = file_path + '.npy'
+        path2 = file_path + '.json'
+
+        params_dict = {
+            'mu': self.mu,
+            'dpi': self.dpi,
+            'cross': self.cross,
+            'approach': self.approach,
+            'num_jobs': self.num_jobs,
+            'pixcon_path': path1
+        }
+
+        with open(path1, 'wb') as f:
+            np.save(f, self.con_mat, allow_pickle=True)
+        with open(path2, 'w') as f:
+            json.dump(params_dict, f)
