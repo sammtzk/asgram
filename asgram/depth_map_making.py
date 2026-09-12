@@ -180,10 +180,13 @@ class ZMap:
 
         self.jobs = num_jobs
 
-        self.size = (0, 0)
         self.zm_arr = np.array([])
         self.zm_img = Image.new('1', (0, 0))
         self.update()
+
+    @property
+    def size(self):
+        return self.zm_arr.shape
 
     @staticmethod
     def _matrix_from_source(source):
@@ -213,7 +216,6 @@ class ZMap:
         zarr = integrated_image_smooth(zarr, self.jobs) if self.iis else zarr
         zarr = _pad_img_array(zarr, self.mu, self.dpi) if self.pad else zarr
 
-        self.size = zarr.shape
         self.zm_arr = zarr
         self.zm_img = Image.fromarray(zarr.T * 255.0).convert('L')
         print("Complete.")
