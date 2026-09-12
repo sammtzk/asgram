@@ -320,6 +320,7 @@ class PixCon:
             'dpi': self.dpi,
             'cross': self.cross,
             'approach': self.approach,
+            'fill': self.fill,
             'num_jobs': self.num_jobs,
             'pixcon_path': path1
         }
