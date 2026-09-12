@@ -206,15 +206,18 @@ class ImageControl(QGroupBox):
     # asgram constraints generation ===========================================
     def _constraints_generation(self):
         """Wraps PixCon to use shared parameter state."""
-        if self.zmap_instance is not None and self.spat_instance is not None:
+        if self.zmap_instance is not None:
+            fill = False
+            if self.source_pattern_path is not None:
+                fill = True
             params = self.manager.config
             self.pixcon_instance = PixCon(
                 zmap=self.zmap_instance,
-                sp=self.spat_instance,
                 mu=params.depth_of_field,
                 dpi=params.dots_per_inch,
                 cross=params.cross_view_flag,
                 approach=params.constraint_approach,
+                fill=fill,
                 num_jobs=params.parallelization_cores
             )
             self.con_image.setPixmap(
@@ -244,9 +247,10 @@ class ImageControl(QGroupBox):
     # asgram postprocessing and finalization ==================================
     def _finalize_asgram(self):
         """Wraps finish to use shared parameter state."""
-        if self.pixcon_instance is not None:
+        if self.spat_instance is not None and self.pixcon_instance is not None:
             params = self.manager.config
             self.post_instance = Post(
+                sp=self.spat_instance,
                 pc=self.pixcon_instance,
                 depth=params.convergence_dot_depth,
                 height=params.convergence_dot_placement,

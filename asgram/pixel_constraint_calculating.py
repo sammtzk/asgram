@@ -10,7 +10,6 @@ try:
     from asgram.utils.tiw import _do_work
     from asgram.utils.utils import _pixel_separation
     from asgram.depth_map_making import _normalize_img_array, ZMap
-    from asgram.source_pattern_making import SrcPat
     from asgram.utils.parallelize import (
         worker_count, run_worker, parallelize_workers
     )
@@ -18,7 +17,6 @@ except ModuleNotFoundError:
     from utils.tiw import _do_work
     from utils.utils import _pixel_separation
     from depth_map_making import _normalize_img_array, ZMap
-    from source_pattern_making import SrcPat
     from utils.parallelize import (
         worker_count, run_worker, parallelize_workers
     )
@@ -31,7 +29,6 @@ class DisjointSet:
         self.far = _pixel_separation(0, mu, dpi, cross_eyed=False)
         self.parent = list(range(self.size))
         self.constrained = [False] * self.size
-        # self.recursion_safety = 0
         self.approach = approach
         self.mp = (self.size - 1) / 2
         self.src = self._source_specification()
@@ -241,22 +238,20 @@ class PixCon:
     """Calculates and stores pixel constraints for autostereograms."""
 
     def __init__(
-            self, zmap: ZMap, sp: SrcPat,
-            mu=1/3, dpi=72, cross=False, approach='rl', num_jobs=8
+            self, zmap: ZMap,
+            mu=1/3, dpi=72, cross=False, approach='rl', fill=False, num_jobs=8
     ):
         self.zmap = zmap
-        self.sp = sp
 
         self.mu = mu
         self.dpi = dpi
         self.cross = cross
         self.approach = approach
+        self.fill = fill
         self.num_jobs = num_jobs
 
         self.con_mat = np.array([])
         self.con_img = Image.new('1', (0, 0))
-        self.asg_mat = np.array([])
-        self.asg_img = Image.new('1', (0, 0))
         self.update()
 
     @property
@@ -268,12 +263,8 @@ class PixCon:
         return self.zmap.zm_arr.shape[1]
 
     @property
-    def _sp(self):
-        return self.sp.sp_arr
-
-    @property
     def _re(self):
-        return self.sp.ref is not None
+        return self.fill
 
     @property
     def args_dict(self):
@@ -286,14 +277,6 @@ class PixCon:
             'cross': self.cross,
             'approach': self.approach
         }
-
-    def _img_updates(self, pc):
-        self.con_mat = pc
-        self.con_img = Image.fromarray(
-            _normalize_img_array(pc).T * 255.0
-        ).convert('L')
-        self.asg_mat = np.take_along_axis(self._sp, pc[None, :, :], axis=1)
-        self.asg_img = Image.fromarray(self.asg_mat.T).convert('RGB')
 
     def update(self):
         """Updates the pixel constraints according to class parameters."""
@@ -311,7 +294,10 @@ class PixCon:
                     self.mu, self.dpi, self.cross, self.approach
                 )
 
-        self._img_updates(con)
+        self.con_mat = con
+        self.con_img = Image.fromarray(
+            _normalize_img_array(con).T * 255.0
+        ).convert('L')
         print("Complete.")
 
     def save(self, file_name='temp', dir_path=''):

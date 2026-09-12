@@ -126,16 +126,16 @@ def asgram_widgets():
 
             with zm_output:
                 _zmap = ZMap(
-                    src_img,
-                    mu.value,
-                    dpi.value,
-                    scale.value,
-                    iis.value,
-                    bil.value,
-                    invert.value,
-                    normalize.value,
-                    pad.value,
-                    num_jobs.value
+                    source=src_img,
+                    mu=mu.value,
+                    dpi=dpi.value,
+                    scale=scale.value,
+                    iis=iis.value,
+                    bil=bil.value,
+                    invert=invert.value,
+                    normalize=normalize.value,
+                    pad=pad.value,
+                    num_jobs=num_jobs.value
                 )
             zm_output.clear_output(wait=True)
 
@@ -206,15 +206,15 @@ def asgram_widgets():
 
             with sp_output:
                 _srcpat = SrcPat(
-                    _zmap.size,
-                    ref,
-                    cross.value,
-                    mu.value,
-                    dpi.value,
-                    rfit.value,
-                    approach.value,
-                    rpal.value,
-                    random_seed.value
+                    size=_zmap.size,
+                    ref=ref,
+                    cross_eyed=cross.value,
+                    mu=mu.value,
+                    dpi=dpi.value,
+                    fit=rfit.value,
+                    approach=approach.value,
+                    random_palette=rpal.value,
+                    random_seed=random_seed.value
                 )
             sp_output.clear_output(wait=True)
 
@@ -247,18 +247,22 @@ def asgram_widgets():
 
     def _asg_make_clicked(b):
         _ = b
-        if (_zmap is not None) and (_srcpat is not None):
+        if _zmap is not None:
+            if ref_upload.value != ():
+                fill = True
+            else:
+                fill = False
             nonlocal _pixcon
 
             with asg_output:
                 _pixcon = PixCon(
-                    _zmap,
-                    _srcpat,
-                    mu.value,
-                    dpi.value,
-                    cross.value,
-                    approach.value,
-                    num_jobs.value
+                    zmap=_zmap,
+                    mu=mu.value,
+                    dpi=dpi.value,
+                    cross=cross.value,
+                    approach=approach.value,
+                    fill=fill,
+                    num_jobs=num_jobs.value
                 )
             asg_output.clear_output(wait=True)
 
@@ -271,8 +275,6 @@ def asgram_widgets():
             with asg_output:
                 if _zmap is None:
                     print('Please make Depth Map.')
-                if _srcpat is None:
-                    print('Please make Source Pattern.')
 
         asg_output.clear_output(wait=True)
 
@@ -307,19 +309,20 @@ def asgram_widgets():
 
     def _final_make_clicked(b):
         _ = b
-        if _pixcon is not None:
+        if (_srcpat is not None) and (_pixcon is not None):
             nonlocal _final
 
             with final_output:
                 _post = Post(
-                    _pixcon,
-                    dot_depth.value,
-                    dot_height.value,
-                    mu.value,
-                    dpi.value,
-                    cross.value,
-                    pdvrs.value,
-                    num_jobs.value
+                    sp=_srcpat,
+                    pc=_pixcon,
+                    depth=dot_depth.value,
+                    height=dot_height.value,
+                    mu=mu.value,
+                    dpi=dpi.value,
+                    cross=cross.value,
+                    pdvrs=pdvrs.value,
+                    num_jobs=num_jobs.value
                 )
                 _final = _post.final_img
             final_output.clear_output(wait=True)
@@ -331,7 +334,10 @@ def asgram_widgets():
 
         else:
             with final_output:
-                print('Please make Autostereogram.')
+                if _srcpat is None:
+                    print("Please make Source Pattern.")
+                if _pixcon is None:
+                    print('Please make Autostereogram.')
 
         final_output.clear_output(wait=True)
 

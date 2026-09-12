@@ -8,16 +8,25 @@ import numpy as np
 from PIL import Image
 try:
     from asgram.utils.utils import _pixel_separation
+    from asgram.source_pattern_making import SrcPat
     from asgram.pixel_constraint_calculating import PixCon
     from asgram.utils.parallelize import (
             worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
     from utils.utils import _pixel_separation
+    from source_pattern_making import SrcPat
     from pixel_constraint_calculating import PixCon
     from utils.parallelize import (
             worker_count, run_worker, parallelize_workers
     )
+
+
+def synthesizer(sp: SrcPat, pc: PixCon):
+    """Creates an asgram by applying pixel constraints to source pattern."""
+    pattern = sp.sp_arr
+    constraints = pc.con_mat
+    return np.take_along_axis(pattern, constraints[None, :, :], axis=1)
 
 
 def _redmean_color_diff(color1, color2):
@@ -123,10 +132,11 @@ class Post():
     """Finalizes autostereograms with postprocessing techinques."""
 
     def __init__(
-            self, pc: PixCon,
+            self, sp: SrcPat, pc: PixCon,
             depth=0.0, height='bottom', mu=1/3, dpi=72, cross=False,
             pdvrs=False, num_jobs=-1
     ):
+        self.sp = sp
         self.pc = pc
 
         self.depth = depth
@@ -142,10 +152,14 @@ class Post():
         self.final_img = Image.new('1', (0, 0))
         self.update()
 
+    @property
+    def asg_mat(self):
+        return synthesizer(self.sp, self.pc)
+
     def update(self):
         """Updates the final autostereogram according to class parameters."""
         print("Step: Postprocessing")
-        fin = self.pc.asg_mat
+        fin = self.asg_mat
         fin = pdvrp(fin, num_jobs=self.num_jobs) if self.pdvrs else fin
         fin = dots(fin, self.depth, self.height, self.mu, self.dpi, self.cross)
         self.final_arr = fin
