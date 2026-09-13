@@ -36,8 +36,7 @@ def _normalize_img_array(_arr, normalize=True):
 def _resize_img_array(_arr, mult=1.0):
     if 0.0 < mult and 1.0 != mult:
         dims = tuple(int(round(n * np.sqrt(mult))) for n in _arr.shape[::-1])
-        interpolation = cv.INTER_AREA if 1.0 > mult else cv.INTER_LANCZOS4
-        _arr = cv.resize(_arr, dims, interpolation=interpolation)
+        _arr = cv.resize(_arr, dims, interpolation=cv.INTER_LINEAR_EXACT)
     return _arr
 
 
