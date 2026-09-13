@@ -5,6 +5,7 @@ Functions for cleaning up autostereograms and adding convergence helpers.
 
 import copy
 import numpy as np
+import cv2 as cv
 from PIL import Image
 try:
     from asgram.utils.utils import _pixel_separation
@@ -22,11 +23,76 @@ except ModuleNotFoundError:
     )
 
 
-def synthesizer(sp: SrcPat, pc: PixCon):
-    """Creates an asgram by applying pixel constraints to source pattern."""
-    pattern = sp.sp_arr
-    constraints = pc.con_mat
-    return np.take_along_axis(pattern, constraints[None, :, :], axis=1)
+class Synthesizer:
+    """
+    Creates an asgram by applying pixel constraints to source pattern.
+
+    If there is a size mismatch between the input arrays, defaults to resizing
+    the source pattern to fit the pixel constraints matrix. Alternatively,
+    'con_sharp', 'con_smooth', and 'con_balanced' are inputs which handle
+    constraint matrix resizing and normalization.
+
+    Returns a tuple of autostereogram matrix (asg_mat) and the resized input
+    arrays of sp_arr and con_mat as spat and pcon respectively.
+    """
+
+    def __init__(
+            self, sp_arr: np.ndarray, con_mat: np.ndarray,
+            resize_technique='pattern'
+    ):
+        self.sp_arr = sp_arr
+        self.con_mat = con_mat
+        self.resize_technique = resize_technique
+
+        self.asg_mat = np.array([])
+        self.sp_arr_resized = np.array([])
+        self.con_mat_resized = np.array([])
+        self.update()
+
+    @staticmethod
+    def synthesize(
+        sp_arr: np.ndarray, con_mat: np.ndarray, resize_technique='pattern'
+    ):
+        """
+        Returns a tuple of autostereogram matrix (asg_mat) and the resized
+        input arrays of sp_arr and con_mat as spat and pcon respectively.
+        """
+        spat = sp_arr.copy()
+        pcon = con_mat.copy()
+        sp_dims = tuple(spat.shape[-2:][::-1])
+        pc_dims = tuple(pcon.shape[::-1])
+
+        if sp_dims != pc_dims:
+            if 'pattern' == resize_technique:
+                _ip = cv.INTER_AREA if sp_dims < pc_dims else cv.INTER_LANCZOS4
+                _r = cv.resize(spat[0], pc_dims, interpolation=_ip)[None, :, :]
+                _g = cv.resize(spat[1], pc_dims, interpolation=_ip)[None, :, :]
+                _b = cv.resize(spat[2], pc_dims, interpolation=_ip)[None, :, :]
+                spat = np.vstack([_r, _g, _b])
+            else:
+                temp = pcon.astype(np.float32)
+                if 'con_balanced' == resize_technique:
+                    # resize width-wise first
+                    temp = cv.resize(
+                        src=temp,
+                        dsize=(pc_dims[0], sp_dims[1]),
+                        interpolation=cv.INTER_LINEAR_EXACT
+                    )
+                # con_sharp is default interpolation, like in pattern case
+                _ip = cv.INTER_AREA if pc_dims < sp_dims else cv.INTER_LANCZOS4
+                if 'con_smooth' == resize_technique:
+                    _ip = cv.INTER_LINEAR_EXACT
+                temp = cv.resize(temp, sp_dims, interpolation=_ip)
+                temp *= float(sp_dims[1]) / float(pc_dims[1])  # scale pointers
+                pcon = np.round(temp).astype(np.uint16)
+
+        asg_mat = np.take_along_axis(spat, pcon[None, :, :], axis=1)
+        return (asg_mat, spat, pcon)
+
+    def update(self):
+        """Updates output arrays according to class attributes."""
+        asc = self.synthesize(self.sp_arr, self.con_mat, self.resize_technique)
+        self.asg_mat, self.sp_arr_resized, self.con_mat_resized = asc
 
 
 def _redmean_color_diff(color1, color2):
@@ -154,7 +220,8 @@ class Post():
 
     @property
     def asg_mat(self):
-        return synthesizer(self.sp, self.pc)
+        synth = Synthesizer(self.sp.sp_arr, self.pc.con_mat)
+        return synth.asg_mat
 
     def update(self):
         """Updates the final autostereogram according to class parameters."""
