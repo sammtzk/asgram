@@ -24,6 +24,8 @@ except ModuleNotFoundError:
 
 class DisjointSet:
     """Data structure for traversing pixel constraints. Modified union find."""
+    flip_approach = {'mo': 'oi', 'oi': 'mo', 'lr': 'rl', 'rl': 'lr'}
+
     def __init__(self, list_size, mu=1/3, dpi=72, approach='rl'):
         self.size = list_size
         self.far = _pixel_separation(0, mu, dpi, cross_eyed=False)
@@ -31,56 +33,26 @@ class DisjointSet:
         self.constrained = [False] * self.size
         self.approach = approach
         self.mp = (self.size - 1) / 2
-        self.src = self._source_specification()
-        if self.src is not None:
-            assert len(self.src) == self.far
 
-    def _source_specification(self):
-        if self.approach in ['rl', 'lr', 'mo']:
-            if self.approach == 'rl':
-                ma = self.size
-                mi = ma - self.far
-            elif self.approach == 'lr':
-                mi = 0
-                ma = mi + self.far
-            else:   # 'mo'
-                mi = round(self.mp - self.far / 2)
-                ma = mi + self.far
+    def _prefer(self, idx, jdx, _approach=None):
+        if _approach is None:
+            _approach = self.approach
 
-            return np.arange(mi, ma)
-
-        elif self.approach == 'oi':
-            lsize = round(self.far / 2)
-            lmi = 0
-            lma = lmi + lsize
-            lsource = np.arange(lmi, lma)
-
-            rsize = self.far - lsize
-            rma = self.size
-            rmi = rma - rsize
-            rsource = np.arange(rmi, rma)
-
-            return np.concat([lsource, rsource])
-
-        else:
-            return None
-
-    def _prefer(self, idx, jdx):
-        if self.approach == 'mo':
+        if _approach == 'mo':
             if abs(idx - self.mp) < abs(jdx - self.mp):
                 return idx, jdx
             return jdx, idx
-        if self.approach == 'oi':
+        if _approach == 'oi':
             if abs(idx - self.mp) > abs(jdx - self.mp):
                 return idx, jdx
             return jdx, idx
-        if self.approach == 'lr':
+        if _approach == 'lr':
             return min(idx, jdx), max(idx, jdx)
-        if self.approach == 'rl':
+        if _approach == 'rl':
             return max(idx, jdx), min(idx, jdx)
         return np.random.choice([idx, jdx], size=2, replace=False).tolist()
 
-    def _boundary_prefer(self, l_idx, r_idx, zar_row=None):
+    def _boundary_prefer(self, l_idx, r_idx, opposite=False):
         assert not ((l_idx is None) and (r_idx is None))
         if l_idx is None:
             return self.find(r_idx), 'r'
@@ -88,11 +60,10 @@ class DisjointSet:
             return self.find(l_idx), 'l'
         else:
             lrep, rrep = self.find(l_idx), self.find(r_idx)
-            if zar_row is not None:
-                lz, rz = zar_row[lrep], zar_row[rrep]
-                root = lrep if lz < rz else rrep
-            else:
-                root, _ = self._prefer(lrep, rrep)
+            _approach = self.approach
+            if opposite and (_approach in self.flip_approach.keys()):
+                _approach = self.flip_approach[_approach]
+            root, _ = self._prefer(lrep, rrep, _approach)
             return (root, 'l') if root == lrep else (root, 'r')
 
     def find(self, idx):
@@ -121,75 +92,94 @@ class DisjointSet:
         """Return the parent for each index."""
         return [self.find(i) for i in range(self.size)]
 
-    def shift_oos_roots(self, zar_row=None):
+    def shift_oos_roots(self, src_area_row=None):
         """
         Identify out of source roots, including unconstrained pixels, and shift
         them to values within the source range.
         """
-        output_arr = np.array(self.constraints)     # type: ignore
-        if self.src is not None:
-            def _span_maker(mask, use_z):
+        if src_area_row is not None:
+            output_arr = np.array(self.constraints)  # type: ignore
+
+            def _oos_span_maker(exclusion_mask=None, flip_approach=False):
                 parents = output_arr.copy()
-                parents[mask] = -1
+                if exclusion_mask is None:
+                    exclusion_mask = np.zeros_like(parents, dtype=bool)
+                else:
+                    exclusion_mask = np.array(exclusion_mask)
+                parents[src_area_row | exclusion_mask] = -1
+
                 matches = parents == np.arange(len(parents))
                 padded_matches = np.concat([[False], matches, [False]])
+
                 deltas = (np.where(np.diff(padded_matches))[0]).tolist()
                 assert len(deltas[0::2]) == len(deltas[1::2])
                 spans = [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
-                return [(span, use_z) for span in spans]
+                return [(span, flip_approach) for span in spans]
 
-            uncon_mask = ~(np.asarray(self.constrained))
-            uncon_spans = _span_maker(uncon_mask, use_z=True)
-            root_spans = _span_maker(~uncon_mask, use_z=False)
-            all_spans = uncon_spans + root_spans
+            src_idxs = np.where(src_area_row)[0]
+            max_sep = len(src_idxs)
 
-            # establish bounds for approach-specific sources
-            src_l, src_u = min(self.src).item(), max(self.src).item()
-            for span, use_z in all_spans:
-                # check whether pixels in span partially originate from source
-                s_idx, e_idx = span
-                if (s_idx in self.src) or (e_idx in self.src):
-                    continue
+            def _shift_spans(_spans):
+                for span, flip in _spans:
+                    # safety check whether pixels in span originate from source
+                    s_idx, e_idx = span
+                    if (s_idx in src_idxs) and (e_idx in src_idxs):
+                        continue
 
-                # if oos, unite to either left pixels or right pixels
-                l_idx = s_idx - 1 if 0 < s_idx else None
-                r_idx = e_idx + 1 if self.size - 1 > e_idx else None
-                zar_row_val = zar_row if use_z else None
-                anchor, side = self._boundary_prefer(l_idx, r_idx, zar_row_val)
+                    # if oos, unite to left pixels or right pixels
+                    left = s_idx - 1 if 0 < s_idx else None
+                    right = e_idx + 1 if self.size - 1 > e_idx else None
 
-                # calculate shift based on anchor point
-                reference = s_idx if 'l' == side else e_idx - 1
-                shift_oos = anchor - reference
+                    do_interpolation = False
+                    if (
+                        (e_idx - s_idx > 1)
+                        and (left is not None)
+                        and (right is not None)
+                    ):
+                        if (
+                            (self.find(left) in src_idxs)
+                            and (self.find(right) in src_idxs)
+                        ):
+                            do_interpolation = True
 
-                # apply shift to anchor for values in span
-                for idx in range(s_idx, e_idx):
-                    # check bounds
-                    new_parent = idx + shift_oos
-                    if self.size <= new_parent:
-                        in_bounds = False
-                        while not in_bounds:
-                            new_parent -= self.far
-                            if (src_l <= new_parent) and (src_u >= new_parent):
-                                in_bounds = True
-                        shift = new_parent - idx
-                    elif 0 > new_parent:
-                        in_bounds = False
-                        while not in_bounds:
-                            new_parent += self.far
-                            if (src_l <= new_parent) and (src_u >= new_parent):
-                                in_bounds = True
-                        shift = new_parent - idx
+                    # fill in source idxs
+                    if do_interpolation:
+                        l_idx = np.argmax(self.find(left) == src_idxs).item()
+                        r_idx = np.argmax(self.find(right) == src_idxs).item()
+                        _in_idxs = np.linspace(l_idx, r_idx, e_idx - s_idx + 2)
+                        _in_idxs = np.round(_in_idxs).astype(np.uint16)
+                        insert = src_idxs[_in_idxs]
+
                     else:
-                        shift = shift_oos
+                        anchor, _d = self._boundary_prefer(left, right, flip)
+                        anchor_idx = np.argmax(anchor == src_idxs).item()
 
-                    # shift individual pixel and reassign the root
-                    output_arr[idx] += shift
-                    if not use_z:
-                        output_arr[output_arr == idx] = output_arr[idx]
-        self.parent = output_arr.tolist()
+                        if 'l' == _d:
+                            insert = np.array([
+                                src_idxs[(anchor_idx + i) % max_sep]
+                                for i in range(e_idx - s_idx + 2)
+                            ])
+                        else:  # 'r' == _d
+                            insert = np.array([
+                                src_idxs[(anchor_idx - i) % max_sep]
+                                for i in range(e_idx - s_idx + 2)
+                            ][::-1])
+
+                    output_arr[s_idx:e_idx] = insert[1:-1]
+                self.parent = output_arr.tolist()
+
+            all_spans = _oos_span_maker(flip_approach=False)
+            # uncon_spans = _oos_span_maker(self.constrained, flip_approach=True) # noqa E501
+
+            _shift_spans(all_spans)
+            # _shift_spans(uncon_spans)
 
 
-def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
+def _dsdsc(
+        y, zar, _re=False,
+        mu=1/3, dpi=72, cross_eyed=False, approach='rl',
+        src_area=None
+):
     """Disjoint Set Data Structure Constrain"""
     w = zar.shape[0]
     eye_scalar = round(2.5 * dpi)
@@ -208,10 +198,10 @@ def _dsdsc(y, zar, _re=False, mu=1/3, dpi=72, cross_eyed=False, approach='rl'):
             while visible and (zt < 1):
                 t, zt, visible = _do_work(t, zar, x, y, mu, eye_scalar)
             if visible:
-                pixel_map.unite(left, right)
+                pixel_map.unite(left, right)  # keep l then r
 
-    if _re:
-        pixel_map.shift_oos_roots(zar[:, y])
+    if _re and (src_area is not None):
+        pixel_map.shift_oos_roots(src_area_row=src_area[:, y])
     return np.asarray(pixel_map.constraints, dtype=np.uint16)
 
 
@@ -228,7 +218,8 @@ def _pixcon_worker(_args):
             mu=ad['mu'],
             dpi=ad['dpi'],
             cross_eyed=ad['cross'],
-            approach=ad['approach']
+            approach=ad['approach'],
+            src_area=ad['src_area']
         )
 
     return run_worker(ys_to_build, args_dict, _row_func_wrapper, 2, np.uint16)
@@ -267,6 +258,50 @@ class PixCon:
         return self.fill
 
     @property
+    def src_area(self):
+        """
+        Uses depth map information to determine the size and shape of the
+        source area for pixels fit to a constraint matrix. The source area can
+        be used to determine which pixels should be roots -- pointers which are
+        their own parent -- thereby replacing the earlier source specification
+        method in DisjointSet. Can also be used for source pattern construction
+        for smooth image tiling.
+
+        Returns source area as a bool array where True indicates source pixel.
+        """
+        if self.approach not in ['mo', 'oi', 'lr', 'rl']:
+            return None
+        zm_arr = self.zmap.zm_arr
+        src_area = np.zeros_like(zm_arr, dtype=bool)
+        width, height = self.zmap.size
+
+        for y in range(height):
+            _z = np.max(zm_arr[:, y]) if self.cross else np.min(zm_arr[:, y])
+            max_sep = _pixel_separation(_z, self.mu, self.dpi, self.cross)
+
+            if 'oi' != self.approach:
+                match self.approach:
+                    case 'mo':
+                        row_min = int(np.ceil((width - max_sep) / 2))
+                    case 'lr':
+                        row_min = 0
+                    case _:  # rl
+                        row_min = width - max_sep
+
+                row_max = row_min + max_sep
+                src_area[row_min:row_max, y] = True
+
+            else:
+                lsize = int(np.floor(max_sep / 2))
+                rsize = max_sep - lsize
+                src_area[0:lsize, y] = True
+                src_area[(width - rsize):width, y] = True
+
+            assert max_sep == np.sum(src_area[:, y])
+
+        return src_area
+
+    @property
     def args_dict(self):
         return {
             'src_mat': self.zar,
@@ -275,7 +310,8 @@ class PixCon:
             'mu': self.mu,
             'dpi': self.dpi,
             'cross': self.cross,
-            'approach': self.approach
+            'approach': self.approach,
+            'src_area': self.src_area
         }
 
     def update(self):
@@ -291,7 +327,7 @@ class PixCon:
             for y in range(self.total_ys):
                 con[:, y] = _dsdsc(
                     y, self.zar, self._re,
-                    self.mu, self.dpi, self.cross, self.approach
+                    self.mu, self.dpi, self.cross, self.approach, self.src_area
                 )
 
         self.con_mat = con
