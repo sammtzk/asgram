@@ -24,47 +24,28 @@ except ModuleNotFoundError:
 
 class DisjointSet:
     """Data structure for traversing pixel constraints. Modified union find."""
-    flip_approach = {'mo': 'oi', 'oi': 'mo', 'lr': 'rl', 'rl': 'lr'}
 
     def __init__(self, list_size, mu=1/3, dpi=72, approach='rl'):
         self.size = list_size
         self.far = _pixel_separation(0, mu, dpi, cross_eyed=False)
         self.parent = list(range(self.size))
-        self.constrained = [False] * self.size
         self.approach = approach
         self.mp = (self.size - 1) / 2
 
-    def _prefer(self, idx, jdx, _approach=None):
-        if _approach is None:
-            _approach = self.approach
-
-        if _approach == 'mo':
+    def _prefer(self, idx, jdx):
+        if self.approach == 'mo':
             if abs(idx - self.mp) < abs(jdx - self.mp):
                 return idx, jdx
             return jdx, idx
-        if _approach == 'oi':
+        if self.approach == 'oi':
             if abs(idx - self.mp) > abs(jdx - self.mp):
                 return idx, jdx
             return jdx, idx
-        if _approach == 'lr':
+        if self.approach == 'lr':
             return min(idx, jdx), max(idx, jdx)
-        if _approach == 'rl':
+        if self.approach == 'rl':
             return max(idx, jdx), min(idx, jdx)
         return np.random.choice([idx, jdx], size=2, replace=False).tolist()
-
-    def _boundary_prefer(self, l_idx, r_idx, opposite=False):
-        assert not ((l_idx is None) and (r_idx is None))
-        if l_idx is None:
-            return self.find(r_idx), 'r'
-        elif r_idx is None:
-            return self.find(l_idx), 'l'
-        else:
-            lrep, rrep = self.find(l_idx), self.find(r_idx)
-            _approach = self.approach
-            if opposite and (_approach in self.flip_approach.keys()):
-                _approach = self.flip_approach[_approach]
-            root, _ = self._prefer(lrep, rrep, _approach)
-            return (root, 'l') if root == lrep else (root, 'r')
 
     def find(self, idx):
         """Find the representative of a set."""
@@ -79,9 +60,6 @@ class DisjointSet:
 
     def unite(self, idx, jdx):
         """Join values."""
-        self.constrained[idx] = True
-        self.constrained[jdx] = True
-
         irep, jrep = self.find(idx), self.find(jdx)
         if irep != jrep:
             root, other = self._prefer(irep, jrep)
@@ -100,79 +78,60 @@ class DisjointSet:
         if src_area_row is not None:
             output_arr = np.array(self.constraints)  # type: ignore
 
-            def _oos_span_maker(exclusion_mask=None, flip_approach=False):
+            def _oos_spans_finder():
                 parents = output_arr.copy()
-                if exclusion_mask is None:
-                    exclusion_mask = np.zeros_like(parents, dtype=bool)
-                else:
-                    exclusion_mask = np.array(exclusion_mask)
-                parents[src_area_row | exclusion_mask] = -1
-
+                parents[src_area_row] = -1
                 matches = parents == np.arange(len(parents))
                 padded_matches = np.concat([[False], matches, [False]])
-
                 deltas = (np.where(np.diff(padded_matches))[0]).tolist()
                 assert len(deltas[0::2]) == len(deltas[1::2])
-                spans = [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
-                return [(span, flip_approach) for span in spans]
+                return [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
 
             src_idxs = np.where(src_area_row)[0]
             max_sep = len(src_idxs)
 
             def _shift_spans(_spans):
-                for span, flip in _spans:
-                    # safety check whether pixels in span originate from source
-                    s_idx, e_idx = span
-                    if (s_idx in src_idxs) and (e_idx in src_idxs):
-                        continue
-
-                    # if oos, unite to left pixels or right pixels
-                    left = s_idx - 1 if 0 < s_idx else None
-                    right = e_idx + 1 if self.size - 1 > e_idx else None
+                for s_idx, e_idx in _spans:
+                    span_len = e_idx - s_idx
+                    _l = s_idx - 1 if 0 < s_idx else None
+                    _r = e_idx + 1 if self.size - 1 > e_idx else None
 
                     do_interpolation = False
-                    if (
-                        (e_idx - s_idx > 1)
-                        and (left is not None)
-                        and (right is not None)
-                    ):
-                        if (
-                            (self.find(left) in src_idxs)
-                            and (self.find(right) in src_idxs)
-                        ):
+                    if ((span_len > 1) and (None not in [_l, _r])):
+                        if (all(self.find(_i) in src_idxs for _i in [_l, _r])):
                             do_interpolation = True
 
-                    # fill in source idxs
                     if do_interpolation:
-                        l_idx = np.argmax(self.find(left) == src_idxs).item()
-                        r_idx = np.argmax(self.find(right) == src_idxs).item()
-                        _in_idxs = np.linspace(l_idx, r_idx, e_idx - s_idx + 2)
-                        _in_idxs = np.round(_in_idxs).astype(np.uint16)
-                        insert = src_idxs[_in_idxs]
-
+                        lrep, rrep = self.find(_l), self.find(_r)
+                        insert = np.linspace(lrep, rrep, span_len + 2)
+                        insert = np.round(insert).astype(np.uint16)
                     else:
-                        anchor, _d = self._boundary_prefer(left, right, flip)
+                        assert (_l is not None) or (_r is not None)
+                        if _l is None:
+                            anchor, side = self.find(_r), 'r'
+                        elif _r is None:
+                            anchor, side = self.find(_l), 'l'
+                        else:
+                            lrep, rrep = self.find(_l), self.find(_r)
+                            anchor, _ = self._prefer(lrep, rrep)
+                            side = 'l' if anchor == lrep else 'r'
                         anchor_idx = np.argmax(anchor == src_idxs).item()
 
-                        if 'l' == _d:
+                        if 'l' == side:
                             insert = np.array([
                                 src_idxs[(anchor_idx + i) % max_sep]
-                                for i in range(e_idx - s_idx + 2)
+                                for i in range(span_len + 2)
                             ])
-                        else:  # 'r' == _d
+                        else:  # 'r' == side
                             insert = np.array([
                                 src_idxs[(anchor_idx - i) % max_sep]
-                                for i in range(e_idx - s_idx + 2)
+                                for i in range(span_len + 2)
                             ][::-1])
 
-                    output_arr[s_idx:e_idx] = insert[1:-1]
+                    output_arr[s_idx:e_idx] = insert[1:-1]  # remove buffer
                 self.parent = output_arr.tolist()
 
-            all_spans = _oos_span_maker(flip_approach=False)
-            # uncon_spans = _oos_span_maker(self.constrained, flip_approach=True) # noqa E501
-
-            _shift_spans(all_spans)
-            # _shift_spans(uncon_spans)
+            _shift_spans(_oos_spans_finder())
 
 
 def _dsdsc(
