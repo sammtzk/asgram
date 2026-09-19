@@ -105,7 +105,20 @@ class DisjointSet:
                         # robust index interpolation for oi source areas
                         l_idx = np.argmax(self.find(_l) == src_idxs).item()
                         r_idx = np.argmax(self.find(_r) == src_idxs).item()
-                        _in_idxs = np.linspace(l_idx, r_idx, span_len + 2)
+
+                        if l_idx < r_idx:
+                            _in_idxs = np.linspace(l_idx, r_idx, span_len + 2)
+                        else:
+                            _in_idxs = np.concat([
+                                np.arange(l_idx, max_sep),
+                                np.arange(0, r_idx + 1)
+                            ])
+                            _in_idxs = _in_idxs[
+                                np.round(np.linspace(
+                                    0, len(_in_idxs) - 1, span_len + 2
+                                )).astype(np.uint8)
+                            ]
+
                         _in_idxs = np.round(_in_idxs).astype(np.uint16)
                         insert = src_idxs[_in_idxs]
                     else:
