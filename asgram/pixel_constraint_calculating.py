@@ -102,9 +102,12 @@ class DisjointSet:
                             do_interpolation = True
 
                     if do_interpolation:
-                        lrep, rrep = self.find(_l), self.find(_r)
-                        insert = np.linspace(lrep, rrep, span_len + 2)
-                        insert = np.round(insert).astype(np.uint16)
+                        # robust index interpolation for oi source areas
+                        l_idx = np.argmax(self.find(_l) == src_idxs).item()
+                        r_idx = np.argmax(self.find(_r) == src_idxs).item()
+                        _in_idxs = np.linspace(l_idx, r_idx, span_len + 2)
+                        _in_idxs = np.round(_in_idxs).astype(np.uint16)
+                        insert = src_idxs[_in_idxs]
                     else:
                         assert (_l is not None) or (_r is not None)
                         if _l is None:
