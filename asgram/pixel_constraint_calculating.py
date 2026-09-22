@@ -70,25 +70,27 @@ class DisjointSet:
         """Return the parent for each index."""
         return [self.find(i) for i in range(self.size)]
 
-    def shift_oos_roots(self, src_area_row=None):
+    def shift_oos_roots(self, src_area_row: np.ndarray):
         """
         Identify out of source roots, including unconstrained pixels, and shift
         them to values within the source range.
         """
-        if src_area_row is not None:
-            output_arr = np.array(self.constraints)  # type: ignore
+        if 0 < np.unique(src_area_row).size:
+            output_arr = np.array(self.constraints)
+            src_idxs = np.where(src_area_row)[0]
+            max_sep = len(src_idxs)
 
-            def _oos_spans_finder():
+            def _oos_roots():
                 parents = output_arr.copy()
                 parents[src_area_row] = -1
-                matches = parents == np.arange(len(parents))
+                return parents == np.arange(self.size)
+
+            def _oos_spans_finder():
+                matches = _oos_roots()
                 padded_matches = np.concat([[False], matches, [False]])
                 deltas = (np.where(np.diff(padded_matches))[0]).tolist()
                 assert len(deltas[0::2]) == len(deltas[1::2])
                 return [(s, e) for s, e in zip(deltas[0::2], deltas[1::2])]
-
-            src_idxs = np.where(src_area_row)[0]
-            max_sep = len(src_idxs)
 
             def _shift_spans(_spans):
                 for s_idx, e_idx in _spans:
@@ -96,10 +98,18 @@ class DisjointSet:
                     _l = s_idx - 1 if 0 < s_idx else None
                     _r = e_idx + 1 if self.size - 1 > e_idx else None
 
+                    _l_in_src, _r_in_src = False, False
                     do_interpolation = False
                     if ((span_len > 1) and (None not in [_l, _r])):
-                        if (all(self.find(_i) in src_idxs for _i in [_l, _r])):
+                        _l_in_src = self.find(_l) in src_idxs
+                        _r_in_src = self.find(_r) in src_idxs
+                        if _l_in_src and _r_in_src:
                             do_interpolation = True
+                    else:
+                        if _l is not None:
+                            _l_in_src = self.find(_l) in src_idxs
+                        if _r is not None:
+                            _r_in_src = self.find(_r) in src_idxs
 
                     if do_interpolation:
                         # robust index interpolation for oi source areas
@@ -123,10 +133,16 @@ class DisjointSet:
                         insert = src_idxs[_in_idxs]
                     else:
                         assert (_l is not None) or (_r is not None)
-                        if _l is None:
+                        if not (_l_in_src or _r_in_src):
+                            continue
+                        elif _l is None:
                             anchor, side = self.find(_r), 'r'
                         elif _r is None:
                             anchor, side = self.find(_l), 'l'
+                        elif _l_in_src and not _r_in_src:
+                            anchor, side = self.find(_l), 'l'
+                        elif not _l_in_src and _r_in_src:
+                            anchor, side = self.find(_r), 'r'
                         else:
                             lrep, rrep = self.find(_l), self.find(_r)
                             anchor, _ = self._prefer(lrep, rrep)
@@ -147,13 +163,40 @@ class DisjointSet:
                     output_arr[s_idx:e_idx] = insert[1:-1]  # remove buffer
                 self.parent = output_arr.tolist()
 
-            _shift_spans(_oos_spans_finder())
+            def _handle_root_replacement(old: np.ndarray, new: np.ndarray):
+                for old_root, new_root in zip(old, new):
+                    new_set = output_arr[new_root]
+                    output_arr[output_arr == old_root] = new_root
+                    output_arr[output_arr == new_set] = new_root
+                self.parent = output_arr.tolist()
+
+            def _randomizes_oos_roots():
+                oos_roots = output_arr[_oos_roots()]
+                replacements = np.random.choice(src_idxs, len(oos_roots))
+                _handle_root_replacement(oos_roots, replacements)
+
+            def _clean_up_remaining_oos_roots(remaining_oos_mask: np.ndarray):
+                oos_roots = output_arr[remaining_oos_mask]
+                replacement_idxs = np.round(
+                    np.linspace(0, max_sep - 1, len(oos_roots))
+                ).astype(np.uint8)
+                replacements = src_idxs[replacement_idxs]
+                _handle_root_replacement(oos_roots, replacements)
+
+            if self.approach in ['mo', 'oi', 'lr', 'rl']:
+                _shift_spans(_oos_spans_finder())
+            else:
+                _randomizes_oos_roots()
+
+            output_arr = np.array(self.constraints)
+            oos_roots = _oos_roots()
+            if 0 < np.sum(oos_roots):
+                _clean_up_remaining_oos_roots(oos_roots)
 
 
 def _dsdsc(
-        y, zar, _re=False,
+        y, zar, src_area=None,
         mu=1/3, dpi=72, cross_eyed=False, approach='rl',
-        src_area=None
 ):
     """Disjoint Set Data Structure Constrain"""
     w = zar.shape[0]
@@ -175,7 +218,7 @@ def _dsdsc(
             if visible:
                 pixel_map.unite(left, right)  # keep l then r
 
-    if _re and (src_area is not None):
+    if isinstance(src_area, np.ndarray):
         pixel_map.shift_oos_roots(src_area_row=src_area[:, y])
     return np.asarray(pixel_map.constraints, dtype=np.uint16)
 
@@ -189,12 +232,11 @@ def _pixcon_worker(_args):
         return _dsdsc(
             y=y,
             zar=ad['src_mat'],
-            _re=ad['_re'],
+            src_area=ad['src_area'],
             mu=ad['mu'],
             dpi=ad['dpi'],
             cross_eyed=ad['cross'],
-            approach=ad['approach'],
-            src_area=ad['src_area']
+            approach=ad['approach']
         )
 
     return run_worker(ys_to_build, args_dict, _row_func_wrapper, 2, np.uint16)
@@ -205,7 +247,8 @@ class PixCon:
 
     def __init__(
             self, zmap: ZMap,
-            mu=1/3, dpi=72, cross=False, approach='rl', fill=False, num_jobs=8
+            mu=1/3, dpi=72, cross=False, approach='rl', fill=False, num_jobs=8,
+            update_on_init=True
     ):
         self.zmap = zmap
 
@@ -216,24 +259,29 @@ class PixCon:
         self.fill = fill
         self.num_jobs = num_jobs
 
+        self._custom_src_area = None
+
         self.con_mat = np.array([])
         self.con_img = Image.new('1', (0, 0))
-        self.update()
+
+        if update_on_init:
+            self.update()
+
+    def specify_custom_src_area(self, src_area: np.ndarray):
+        """Assigns a src_area bool array to self._custom_src_area."""
+        self._custom_src_area = src_area.astype(bool)
 
     @property
-    def zar(self):
-        return self.zmap.zm_arr
+    def _src_area_custom(self):
+        src_area_c = self._custom_src_area
+        if isinstance(src_area_c, np.ndarray):
+            if src_area_c.shape == self.zmap.size:
+                if False not in np.max(src_area_c, axis=0):
+                    return src_area_c
+        return None
 
     @property
-    def total_ys(self):
-        return self.zmap.zm_arr.shape[1]
-
-    @property
-    def _re(self):
-        return self.fill
-
-    @property
-    def src_area(self):
+    def src_area_estimate(self):
         """
         Uses depth map information to determine the size and shape of the
         source area for pixels fit to a constraint matrix. The source area can
@@ -243,12 +291,15 @@ class PixCon:
         for smooth image tiling.
 
         Returns source area as a bool array where True indicates source pixel.
+        If params dictate not to enforce source, output source area will
+        default to self._src_area_custom if applicable, otherwise an array of
+        True values.
         """
-        if self.approach not in ['mo', 'oi', 'lr', 'rl']:
-            return None
         zm_arr = self.zmap.zm_arr
-        src_area = np.zeros_like(zm_arr, dtype=bool)
         width, height = self.zmap.size
+        src_area = np.zeros_like(zm_arr, dtype=bool)
+        if (self.approach not in ['mo', 'oi', 'lr', 'rl']) or (not self.fill):
+            return ~src_area
 
         for y in range(height):
             _z = np.max(zm_arr[:, y]) if self.cross else np.min(zm_arr[:, y])
@@ -277,16 +328,48 @@ class PixCon:
         return src_area
 
     @property
+    def src_area_basic(self):
+        """
+        Returns self._custom_src_area if valid otherwise will return
+        self.src_area_estimate.
+        """
+        src_area_c = self._src_area_custom
+        if src_area_c is not None:
+            return src_area_c
+
+        return self.src_area_estimate
+
+    @property
+    def src_area(self):
+        """
+        Returns source area as a bool array where True indicates source pixel.
+        Priority is as follows:
+            1. from self.con_mat
+            2. from self._custom_src_area
+            3. from self.zmap.zm_arr (via self._src_area_from_zm)
+            4. generic source (all pixels) (via self._src_area_from_zm)
+        """
+        if 0 < self.con_mat.size:
+            src_area = np.zeros_like(self.con_mat, dtype=bool)
+            for y in range(self.con_mat.shape[1]):
+                src_area[np.unique(self.con_mat[:, y]), y] = True
+            return src_area
+        return self.src_area_basic
+
+    @property
+    def total_ys(self):
+        return self.zmap.zm_arr.shape[1]
+
+    @property
     def args_dict(self):
         return {
-            'src_mat': self.zar,
+            'src_mat': self.zmap.zm_arr,
             'total_ys': self.total_ys,
-            '_re': self._re,
+            'src_area': self.src_area_basic,
             'mu': self.mu,
             'dpi': self.dpi,
             'cross': self.cross,
-            'approach': self.approach,
-            'src_area': self.src_area
+            'approach': self.approach
         }
 
     def update(self):
@@ -298,11 +381,11 @@ class PixCon:
                 self.args_dict, _pixcon_worker, jobs, np.uint16
             )
         else:
-            con = np.zeros_like(self.zar, dtype=np.uint16)
+            con = np.zeros_like(self.zmap.zm_arr, dtype=np.uint16)
             for y in range(self.total_ys):
                 con[:, y] = _dsdsc(
-                    y, self.zar, self._re,
-                    self.mu, self.dpi, self.cross, self.approach, self.src_area
+                    y, self.zmap.zm_arr, self.src_area_basic,
+                    self.mu, self.dpi, self.cross, self.approach
                 )
 
         self.con_mat = con
