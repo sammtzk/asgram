@@ -16,10 +16,10 @@ except ModuleNotFoundError:
 
 
 def asgram(
-    src, ref=None, rfit='fit',
+    src, ref=None, rfit='fit', sfit='estimate',
     mu=1/3, dpi=72, cross=False, approach='rl', fill=False,
     normalize=True, invert=False, iis=False, bil=False, pad=False, scale=1.0,
-    rpal='bw', rseed=1132,
+    rpal='bw', seed=1132,
     pdvrs=False, dot_depth=0.0, dot_height='bottom',
     num_jobs=8
 ):
@@ -30,7 +30,9 @@ def asgram(
     Thimbleby, Inglis, & Witten (1994), adapted to Python.
     """
     zm = ZMap(src, mu, dpi, scale, iis, bil, invert, normalize, pad, num_jobs)
-    sp = SrcPat(zm.size, ref, cross, mu, dpi, rfit, approach, rpal, rseed)
     pc = PixCon(zm, mu, dpi, cross, approach, fill, num_jobs)
+    sp = SrcPat(
+        pc, zm.size, ref, rfit, sfit, mu, dpi, cross, approach, rpal, seed
+    )
     asg = Post(sp, pc, dot_depth, dot_height, mu, dpi, cross, pdvrs, num_jobs)
     return asg.final_img

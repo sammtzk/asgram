@@ -204,14 +204,23 @@ def asgram_widgets():
                 ref = None
             nonlocal _srcpat
 
+            if 'ES' == rfit.value:
+                _fit = 'fit'
+                _sfit = 'estimate'
+            else:
+                _fit = rfit.value
+                _sfit = ''
+
             with sp_output:
                 _srcpat = SrcPat(
+                    pc=_pixcon,
                     size=_zmap.size,
                     ref=ref,
-                    cross_eyed=cross.value,
+                    ref_fit=_fit,
+                    src_fit=_sfit,
                     mu=mu.value,
                     dpi=dpi.value,
-                    fit=rfit.value,
+                    cross_eyed=cross.value,
                     approach=approach.value,
                     random_palette=rpal.value,
                     random_seed=random_seed.value

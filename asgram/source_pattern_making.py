@@ -3,37 +3,20 @@
 Functions for building, modifying, and generating source patterns.
 """
 
+from typing import Union
 import numpy as np
 from PIL import Image
+import cv2 as cv
 from matplotlib import colormaps
 try:
     from asgram.utils.utils import _pixel_separation
+    from asgram.pixel_constraint_calculating import PixCon
 except ModuleNotFoundError:
     from utils.utils import _pixel_separation
+    from pixel_constraint_calculating import PixCon
 
 
 # Pattern Making Helpers
-def enforce_source(ref, w, h, source_width, approach='rl'):
-    """
-    Ensures that unconstrained asgram pixels also originate from
-    approach-specific sources by isolating the source image.
-    """
-    ref = ref.resize((w, h))
-    asg = np.array(ref.convert('RGB')).T
-
-    match approach:
-        case 'mo':
-            lbound = round((w - source_width) / 2)
-            rbound = source_width + lbound
-            source = asg[:, lbound:rbound]
-        case 'lr':
-            source = asg[:, :source_width]
-        case _:     # rl as default
-            source = asg[:, -source_width:]
-
-    return Image.fromarray(source.T)
-
-
 def _rotf(whole, part):
     """Repeat (Odd) Times Finder"""
     _rep_times = int(np.ceil(whole / part))
@@ -93,24 +76,6 @@ def source_crop(asg, w, h, approach):
     return asg
 
 
-# Special Cases (oi source specification, rds)
-def _enforce_oi_source(ref, w, h, source_width):
-    """Handles the special case of outer source pixels."""
-    ref = ref.resize((w, h))
-    asg = np.array(ref.convert('RGB')).T
-
-    lwidth = round(w / 2)
-    rwidth = w - lwidth
-
-    lsource = asg[:, :source_width]
-    rsource = asg[:, -source_width:]
-
-    lasg = np.tile(lsource, (1, _rotf(lwidth, source_width), 1))[:, :lwidth]
-    rasg = np.tile(rsource, (1, _rotf(lwidth, source_width), 1))[:, -rwidth:]
-
-    return np.concat([lasg, rasg], axis=1)
-
-
 def _color_palette_maker(palette='bw'):
     if palette in list(colormaps):
         color_palette = colormaps[palette](np.linspace(0, 1, 8))
@@ -126,25 +91,56 @@ class SrcPat:
     """Stores and augments source patterns for autostereograms."""
 
     def __init__(
-            self, size, ref=None, cross_eyed=False,
-            mu=1/3, dpi=72, fit='fit', approach='rl',
+            self, pc: Union[PixCon, None], size,
+            ref=None, ref_fit='fit', src_fit='estimate',
+            mu=1/3, dpi=72, cross_eyed=False, approach='rl',
             random_palette='bw', random_seed=1132
     ):
+        self.pc = pc
         self.size = size
+        if self.pc is not None:
+            self.size = self.pc.zmap.size
+
         self.ref = ref
-        self.cross_eyed = cross_eyed
+        self.ref_fit = ref_fit
+        self.src_fit = src_fit
 
         self.mu = mu
         self.dpi = dpi
-        self.fit = fit
+        self.cross_eyed = cross_eyed
         self.approach = approach
 
         self.random_palette = random_palette
+        np.random.seed(random_seed)
 
         self.sp_arr = np.array([])
         self.sp_img = Image.new('1', (0, 0))
-        np.random.seed(random_seed)
         self.update()
+
+    def _fit_to_source(self, asg):
+        """Refits the asgram pattern to match the PixCon source area."""
+        if (self.src_fit in ['estimate', 'exact']) and (self.pc is not None):
+            if 'exact' == self.src_fit:
+                src = self.pc.src_area
+            else:
+                src = self.pc.src_area_basic
+            height = src.shape[1]
+            assert asg.shape[2] == height
+
+            input = asg.T
+            output = np.zeros_like(asg, dtype=np.uint8)
+
+            for y in range(height):
+                src_indices = np.where(src[:, y])[0]
+                src_width = len(src_indices)
+                src_fit = cv.resize(
+                    input[[y]], (src_width, 1),
+                    interpolation=cv.INTER_LANCZOS4
+                )[0].T
+                output[:, src_indices, y] = src_fit
+            asg = output
+
+        return asg
 
     def update(self):
         """Updates the source pattern according to class parameters."""
@@ -154,14 +150,9 @@ class SrcPat:
             w, h = self.size
             rep_len = _pixel_separation(0, self.mu, self.dpi, self.cross_eyed)
 
-            if ('ES' == self.fit) and ('oi' == self.approach):
-                asg = _enforce_oi_source(asg, w, h, rep_len)
-            elif ('ES' == self.fit) and ('random' != self.approach):
-                asg = enforce_source(asg, w, h, rep_len, self.approach)
-                asg = asgram_tiler(asg, w, h, rep_len, 'htile')
-            else:
-                asg = asgram_tiler(asg, w, h, rep_len, self.fit)
+            asg = asgram_tiler(asg, w, h, rep_len, self.ref_fit)
             asg = source_crop(asg, w, h, self.approach)
+            asg = self._fit_to_source(asg)
 
         else:
             _col_pal = _color_palette_maker(self.random_palette)

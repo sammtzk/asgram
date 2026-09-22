@@ -168,13 +168,21 @@ class ImageControl(QGroupBox):
             if self.source_pattern_path is not None:
                 ref_pat = Image.open(self.source_pattern_path)
             params = self.manager.config
+            if 'ES' == params.pattern_fit:
+                ref_fit = 'fit'
+                src_fit = 'estimate'
+            else:
+                ref_fit = params.pattern_fit
+                src_fit = ''
             self.spat_instance = SrcPat(
+                pc=self.pixcon_instance,
                 size=self.zmap_instance.size,
                 ref=ref_pat,
-                cross_eyed=params.cross_view_flag,
+                ref_fit=ref_fit,
+                src_fit=src_fit,
                 mu=params.depth_of_field,
                 dpi=params.dots_per_inch,
-                fit=params.pattern_fit,
+                cross_eyed=params.cross_view_flag,
                 approach=params.constraint_approach,
                 random_palette=params.random_pattern_palette,
                 random_seed=params.random_seed
