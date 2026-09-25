@@ -86,18 +86,9 @@ class ImageControl(QGroupBox):
     def _depth_map_making(self):
         """Wraps ZMap to use shared parameter state."""
         if self.depth_map_path is not None:
-            params = self.manager.config
             self.zmap_instance = ZMap(
                 source=self.depth_map_path,
-                mu=params.depth_of_field,
-                dpi=params.dots_per_inch,
-                scale=params.scale_depth_map,
-                iis=params.depth_map_smoothing,
-                bil=params.depth_map_bilateral_filter,
-                invert=params.invert_depth_map,
-                normalize=params.normalize_depth_map,
-                pad=params.pad_depth_map,
-                num_jobs=params.parallelization_cores
+                p=self.manager.config
             )
             self.dmm_image.setPixmap(pil_to_pixmap(self.zmap_instance.zm_img))
         self.dmm_dims.setText(self._zmap_instance_dims_display())
@@ -167,25 +158,11 @@ class ImageControl(QGroupBox):
             ref_pat = None
             if self.source_pattern_path is not None:
                 ref_pat = Image.open(self.source_pattern_path)
-            params = self.manager.config
-            if 'ES' == params.pattern_fit:
-                ref_fit = 'fit'
-                src_fit = 'estimate'
-            else:
-                ref_fit = params.pattern_fit
-                src_fit = ''
             self.spat_instance = SrcPat(
-                pc=self.pixcon_instance,
                 size=self.zmap_instance.size,
-                ref=ref_pat,
-                ref_fit=ref_fit,
-                src_fit=src_fit,
-                mu=params.depth_of_field,
-                dpi=params.dots_per_inch,
-                cross_eyed=params.cross_view_flag,
-                approach=params.constraint_approach,
-                random_palette=params.random_pattern_palette,
-                random_seed=params.random_seed
+                pc=self.pixcon_instance,
+                p=self.manager.config,
+                ref=ref_pat
             )
             self.spm_image.setPixmap(pil_to_pixmap(self.spat_instance.sp_img))
         self.spm_dims.setText(self._spat_instance_dims_display())
@@ -215,18 +192,12 @@ class ImageControl(QGroupBox):
     def _constraints_generation(self):
         """Wraps PixCon to use shared parameter state."""
         if self.zmap_instance is not None:
-            fill = False
+            self.manager.config.fill_constraint_gaps = False
             if self.source_pattern_path is not None:
-                fill = True
-            params = self.manager.config
+                self.manager.config.fill_constraint_gaps = True
             self.pixcon_instance = PixCon(
                 zmap=self.zmap_instance,
-                mu=params.depth_of_field,
-                dpi=params.dots_per_inch,
-                cross=params.cross_view_flag,
-                approach=params.constraint_approach,
-                fill=fill,
-                num_jobs=params.parallelization_cores
+                p=self.manager.config
             )
             self.con_image.setPixmap(
                 pil_to_pixmap(self.pixcon_instance.con_img)
@@ -256,17 +227,10 @@ class ImageControl(QGroupBox):
     def _finalize_asgram(self):
         """Wraps finish to use shared parameter state."""
         if self.spat_instance is not None and self.pixcon_instance is not None:
-            params = self.manager.config
             self.post_instance = Post(
                 sp=self.spat_instance,
                 pc=self.pixcon_instance,
-                depth=params.convergence_dot_depth,
-                height=params.convergence_dot_placement,
-                mu=params.depth_of_field,
-                dpi=params.dots_per_inch,
-                cross=params.cross_view_flag,
-                pdvrs=params.pixel_disparity_smoothing,
-                num_jobs=params.parallelization_cores
+                p=self.manager.config
             )
             self.fin_image.setPixmap(
                 pil_to_pixmap(self.post_instance.final_img, 'l')

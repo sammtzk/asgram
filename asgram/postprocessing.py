@@ -8,14 +8,16 @@ import numpy as np
 import cv2 as cv
 from PIL import Image
 try:
-    from asgram.utils.utils import _pixel_separation
+    from asgram.utils.utils import _pixel_separation as _pix_sep
+    from asgram.utils.params import Params
     from asgram.source_pattern_making import SrcPat
     from asgram.pixel_constraint_calculating import PixCon
     from asgram.utils.parallelize import (
             worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
-    from utils.utils import _pixel_separation
+    from utils.utils import _pixel_separation as _pix_sep
+    from utils.params import Params
     from source_pattern_making import SrcPat
     from pixel_constraint_calculating import PixCon
     from utils.parallelize import (
@@ -168,7 +170,7 @@ def dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
         colors, counts = np.unique(s_pixels, axis=1, return_counts=True)
         dot_color = colors[:, np.argmin(counts)]
 
-        how_far = _pixel_separation(depth, mu, dpi, cross_eyed)
+        how_far = _pix_sep(depth, mu, dpi, cross_eyed)
         dot_r2 = (np.hypot(w, h) / 100) ** 2
 
         x_center_1 = w / 2 - how_far / 2
@@ -197,22 +199,10 @@ def dots(asg, depth, height='bottom', mu=1/3, dpi=72, cross_eyed=False):
 class Post():
     """Finalizes autostereograms with postprocessing techinques."""
 
-    def __init__(
-            self, sp: SrcPat, pc: PixCon,
-            depth=0.0, height='bottom', mu=1/3, dpi=72, cross=False,
-            pdvrs=False, num_jobs=-1
-    ):
+    def __init__(self, sp: SrcPat, pc: PixCon, p: Params):
         self.sp = sp
         self.pc = pc
-
-        self.depth = depth
-        self.height = height
-        self.mu = mu
-        self.dpi = dpi
-        self.cross = cross
-
-        self.pdvrs = pdvrs
-        self.num_jobs = num_jobs
+        self.p = p
 
         self.final_arr = np.array([])
         self.final_img = Image.new('1', (0, 0))
@@ -227,8 +217,13 @@ class Post():
         """Updates the final autostereogram according to class parameters."""
         print("Step: Postprocessing")
         fin = self.asg_mat
-        fin = pdvrp(fin, num_jobs=self.num_jobs) if self.pdvrs else fin
-        fin = dots(fin, self.depth, self.height, self.mu, self.dpi, self.cross)
+        if self.p.pixel_disparity_smoothing:
+            fin = pdvrp(fin, num_jobs=self.p.num_jobs)
+        fin = dots(
+            fin,
+            self.p.convergence_dot_depth, self.p.convergence_dot_placement,
+            self.p.mu, self.p.dpi, self.p.cross
+        )
         self.final_arr = fin
         self.final_img = Image.fromarray(fin.T).convert('RGB')
         print("Complete.")

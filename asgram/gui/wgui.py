@@ -15,11 +15,13 @@ from IPython.display import Image as IPyImage
 from PIL import Image
 from matplotlib import colormaps
 try:
+    from asgram.utils.params import Params
     from asgram.depth_map_making import ZMap
     from asgram.source_pattern_making import SrcPat
     from asgram.pixel_constraint_calculating import PixCon
     from asgram.postprocessing import Post
 except ModuleNotFoundError:
+    from utils.params import Params
     from depth_map_making import ZMap
     from source_pattern_making import SrcPat
     from pixel_constraint_calculating import PixCon
@@ -124,19 +126,20 @@ def asgram_widgets():
                 src_img = Image.open(BytesIO(img_upload.value[0].content))
             nonlocal _zmap
 
+            _temp_params = Params(
+                depth_of_field=mu.value,
+                dots_per_inch=dpi.value,
+                scale_depth_map=scale.value,
+                depth_map_smoothing=iis.value,
+                depth_map_bilateral_filter=bil.value,
+                invert_depth_map=invert.value,
+                normalize_depth_map=normalize.value,
+                pad_depth_map=pad.value,
+                parallelization_cores=num_jobs.value
+            )
+
             with zm_output:
-                _zmap = ZMap(
-                    source=src_img,
-                    mu=mu.value,
-                    dpi=dpi.value,
-                    scale=scale.value,
-                    iis=iis.value,
-                    bil=bil.value,
-                    invert=invert.value,
-                    normalize=normalize.value,
-                    pad=pad.value,
-                    num_jobs=num_jobs.value
-                )
+                _zmap = ZMap(source=src_img, p=_temp_params)
             zm_output.clear_output(wait=True)
 
             _buffer = BytesIO()
@@ -211,19 +214,20 @@ def asgram_widgets():
                 _fit = rfit.value
                 _sfit = ''
 
+            _temp_params = Params(
+                pattern_fit=_fit,
+                source_fit=_sfit,
+                depth_of_field=mu.value,
+                dots_per_inch=dpi.value,
+                cross_view_flag=cross.value,
+                constraint_approach=approach.value,
+                random_pattern_palette=rpal.value,
+                random_seed=random_seed.value
+            )
+
             with sp_output:
                 _srcpat = SrcPat(
-                    pc=_pixcon,
-                    size=_zmap.size,
-                    ref=ref,
-                    ref_fit=_fit,
-                    src_fit=_sfit,
-                    mu=mu.value,
-                    dpi=dpi.value,
-                    cross_eyed=cross.value,
-                    approach=approach.value,
-                    random_palette=rpal.value,
-                    random_seed=random_seed.value
+                    size=_zmap.size, pc=_pixcon, p=_temp_params, ref=ref
                 )
             sp_output.clear_output(wait=True)
 
@@ -263,16 +267,17 @@ def asgram_widgets():
                 fill = False
             nonlocal _pixcon
 
+            _temp_params = Params(
+                depth_of_field=mu.value,
+                dots_per_inch=dpi.value,
+                cross_view_flag=cross.value,
+                constraint_approach=approach.value,
+                fill_constraint_gaps=fill,
+                parallelization_cores=num_jobs.value
+            )
+
             with asg_output:
-                _pixcon = PixCon(
-                    zmap=_zmap,
-                    mu=mu.value,
-                    dpi=dpi.value,
-                    cross=cross.value,
-                    approach=approach.value,
-                    fill=fill,
-                    num_jobs=num_jobs.value
-                )
+                _pixcon = PixCon(zmap=_zmap, p=_temp_params)
             asg_output.clear_output(wait=True)
 
             _buffer = BytesIO()
@@ -321,18 +326,18 @@ def asgram_widgets():
         if (_srcpat is not None) and (_pixcon is not None):
             nonlocal _final
 
+            _temp_params = Params(
+                convergence_dot_depth=dot_depth.value,
+                convergence_dot_placement=dot_height.value,
+                depth_of_field=mu.value,
+                dots_per_inch=dpi.value,
+                cross_view_flag=cross.value,
+                pixel_disparity_smoothing=pdvrs.value,
+                parallelization_cores=num_jobs.value
+            )
+
             with final_output:
-                _post = Post(
-                    sp=_srcpat,
-                    pc=_pixcon,
-                    depth=dot_depth.value,
-                    height=dot_height.value,
-                    mu=mu.value,
-                    dpi=dpi.value,
-                    cross=cross.value,
-                    pdvrs=pdvrs.value,
-                    num_jobs=num_jobs.value
-                )
+                _post = Post(sp=_srcpat, pc=_pixcon, p=_temp_params)
                 _final = _post.final_img
             final_output.clear_output(wait=True)
 

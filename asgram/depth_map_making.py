@@ -9,12 +9,14 @@ import cv2 as cv
 from PIL import Image
 import openexr_numpy
 try:
-    from asgram.utils.utils import _pixel_separation
+    from asgram.utils.utils import _pixel_separation as _pix_sep
+    from asgram.utils.params import Params
     from asgram.utils.parallelize import (
             worker_count, run_worker, parallelize_workers
     )
 except ModuleNotFoundError:
-    from utils.utils import _pixel_separation
+    from utils.utils import _pixel_separation as _pix_sep
+    from utils.params import Params
     from utils.parallelize import (
             worker_count, run_worker, parallelize_workers
     )
@@ -41,7 +43,7 @@ def _resize_img_array(_arr, mult=1.0):
 
 
 def _pad_img_array(_arr, mu=1/3, dpi=72):
-    far = _pixel_separation(0, mu, dpi, cross_eyed=False)
+    far = _pix_sep(0, mu, dpi, cross_eyed=False)
     l_pad = np.repeat(_arr[0:1, :], far, axis=0)
     r_pad = np.repeat(_arr[-1:, :], far, axis=0)
     return np.vstack((l_pad, _arr, r_pad))
@@ -159,25 +161,9 @@ def integrated_image_smooth(_arr, num_jobs=-1):
 class ZMap:
     """ Stores and augments depth maps using OpenCV and NumPy methods."""
 
-    def __init__(
-            self, source, mu=1/3, dpi=72,
-            scale=1.0, iis=False, bil=False,
-            invert=False, normalize=True, pad=False,
-            num_jobs=-1
-    ):
+    def __init__(self, source, p: Params):
         self.src_arr = self._matrix_from_source(source)
-        self.mu = mu
-        self.dpi = dpi
-
-        self.scale = scale
-        self.iis = iis
-        self.bil = bil
-
-        self.invert = invert
-        self.normalize = normalize
-        self.pad = pad
-
-        self.jobs = num_jobs
+        self.p = p
 
         self.zm_arr = np.array([])
         self.zm_img = Image.new('1', (0, 0))
@@ -208,12 +194,15 @@ class ZMap:
         print("Step: Depth Map Making")
         zarr = self.src_arr.copy()
 
-        zarr = _normalize_img_array(zarr, self.normalize)
-        zarr = (1.0 - zarr) if self.invert else zarr
-        zarr = _resize_img_array(zarr, self.scale)
-        zarr = cv.bilateralFilter(zarr, 9, 75, 75) if self.bil else zarr
-        zarr = integrated_image_smooth(zarr, self.jobs) if self.iis else zarr
-        zarr = _pad_img_array(zarr, self.mu, self.dpi) if self.pad else zarr
+        zarr = _normalize_img_array(zarr, self.p.normalize_depth_map)
+        zarr = (1.0 - zarr) if self.p.invert_depth_map else zarr
+        zarr = _resize_img_array(zarr, self.p.scale_depth_map)
+        if self.p.depth_map_bilateral_filter:
+            zarr = cv.bilateralFilter(zarr, 9, 75, 75)
+        if self.p.depth_map_smoothing:
+            zarr = integrated_image_smooth(zarr, self.p.num_jobs)
+        if self.p.pad_depth_map:
+            zarr = _pad_img_array(zarr, self.p.mu, self.p.dpi)
 
         self.zm_arr = zarr
         self.zm_img = Image.fromarray(zarr.T * 255.0).convert('L')

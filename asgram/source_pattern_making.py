@@ -9,10 +9,12 @@ from PIL import Image
 import cv2 as cv
 from matplotlib import colormaps
 try:
-    from asgram.utils.utils import _pixel_separation
+    from asgram.utils.utils import _pixel_separation as _pix_sep
+    from asgram.utils.params import Params
     from asgram.pixel_constraint_calculating import PixCon
 except ModuleNotFoundError:
-    from utils.utils import _pixel_separation
+    from utils.utils import _pixel_separation as _pix_sep
+    from utils.params import Params
     from pixel_constraint_calculating import PixCon
 
 
@@ -90,28 +92,14 @@ def _color_palette_maker(palette='bw'):
 class SrcPat:
     """Stores and augments source patterns for autostereograms."""
 
-    def __init__(
-            self, pc: Union[PixCon, None], size,
-            ref=None, ref_fit='fit', src_fit='estimate',
-            mu=1/3, dpi=72, cross_eyed=False, approach='rl',
-            random_palette='bw', random_seed=1132
-    ):
-        self.pc = pc
+    def __init__(self, size, pc: Union[PixCon, None], p: Params, ref=None):
         self.size = size
+        self.pc = pc
         if self.pc is not None:
             self.size = self.pc.zmap.size
-
+        self.p = p
         self.ref = ref
-        self.ref_fit = ref_fit
-        self.src_fit = src_fit
-
-        self.mu = mu
-        self.dpi = dpi
-        self.cross_eyed = cross_eyed
-        self.approach = approach
-
-        self.random_palette = random_palette
-        np.random.seed(random_seed)
+        np.random.seed(self.p.random_seed)
 
         self.sp_arr = np.array([])
         self.sp_img = Image.new('1', (0, 0))
@@ -119,8 +107,11 @@ class SrcPat:
 
     def _fit_to_source(self, asg):
         """Refits the asgram pattern to match the PixCon source area."""
-        if (self.src_fit in ['estimate', 'exact']) and (self.pc is not None):
-            if 'exact' == self.src_fit:
+        if (
+            (self.p.source_fit in ['estimate', 'exact'])
+            and (self.pc is not None)
+        ):
+            if 'exact' == self.p.source_fit:
                 src = self.pc.src_area
             else:
                 src = self.pc.src_area_basic
@@ -148,14 +139,14 @@ class SrcPat:
         if self.ref is not None:
             asg = self.ref.copy()
             w, h = self.size
-            rep_len = _pixel_separation(0, self.mu, self.dpi, self.cross_eyed)
+            rep_len = _pix_sep(0, self.p.mu, self.p.dpi, self.p.cross)
 
-            asg = asgram_tiler(asg, w, h, rep_len, self.ref_fit)
-            asg = source_crop(asg, w, h, self.approach)
+            asg = asgram_tiler(asg, w, h, rep_len, self.p.pattern_fit)
+            asg = source_crop(asg, w, h, self.p.approach)
             asg = self._fit_to_source(asg)
 
         else:
-            _col_pal = _color_palette_maker(self.random_palette)
+            _col_pal = _color_palette_maker(self.p.random_pattern_palette)
             asg = np.array(
                 _col_pal[np.random.randint(len(_col_pal), size=self.size)],
                 dtype=np.uint8

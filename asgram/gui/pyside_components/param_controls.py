@@ -73,7 +73,7 @@ class ParamControl(QGroupBox):
         tool.setChecked(default)
         tool.stateChanged.connect(
             lambda state: (
-                self.manager.param_update(_field, state),
+                self.manager.param_update(_field, 0 != state),
                 label.setText(f"{_text}: {0 != state}")
             )
         )
@@ -82,7 +82,7 @@ class ParamControl(QGroupBox):
 
     def labeled_dropdown(self, _text, _field):
         """Dropdown for asgram parameters."""
-        cdp_items = self.manager.config.item_lookup(_field)
+        cdp_items = self.manager.config.dropdown_lookup(_field)
         cdp_default = next(iter(cdp_items), '')
         label = QLabel(f"{_text}: {cdp_default}")
 
