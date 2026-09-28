@@ -1,4 +1,7 @@
-# GUI
+# VSCode
+.vscode/
+
+# Gradio GUI [deprecated]
 .gradio/
 
 # Python template
