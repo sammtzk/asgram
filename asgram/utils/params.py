@@ -106,7 +106,8 @@ class Params(BaseModel):
             return 'bw'
         return v
 
-    def dropdown_lookup(self, field_name):
+    @classmethod
+    def dropdown_lookup(cls, field_name):
         """
         Dropdown menus are used for some parameter inputs in asgram guis, even
         for some data types which are not Literals. In these cases, this method
@@ -115,7 +116,7 @@ class Params(BaseModel):
         of parameters. If a parameter is not a field of Params or has no
         associated lookup dictionary, then this method returns an empty dict.
         """
-        if hasattr(self, field_name):
+        if field_name in cls.model_fields:
             match field_name:
                 case 'constraint_approach':
                     return {
