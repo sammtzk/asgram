@@ -26,6 +26,6 @@ def asgram(src, p: Params = Params(), ref=None):
     """
     zm = ZMap(src, p)
     pc = PixCon(zm, p)
-    sp = SrcPat(zm.size, pc, p, ref)
+    sp = SrcPat(zm, pc, p, ref)
     asg = Post(sp, pc, p)
     return asg.final_img

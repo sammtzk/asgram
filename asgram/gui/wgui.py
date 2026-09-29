@@ -227,7 +227,7 @@ def asgram_widgets():
 
             with sp_output:
                 _srcpat = SrcPat(
-                    size=_zmap.size, pc=_pixcon, p=_temp_params, ref=ref
+                    zm=_zmap, pc=_pixcon, p=_temp_params, ref=ref
                 )
             sp_output.clear_output(wait=True)
 

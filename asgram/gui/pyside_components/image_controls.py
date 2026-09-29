@@ -159,7 +159,7 @@ class ImageControl(QGroupBox):
             if self.source_pattern_path is not None:
                 ref_pat = Image.open(self.source_pattern_path)
             self.spat_instance = SrcPat(
-                size=self.zmap_instance.size,
+                zm=self.zmap_instance,
                 pc=self.pixcon_instance,
                 p=self.manager.config,
                 ref=ref_pat
@@ -192,9 +192,6 @@ class ImageControl(QGroupBox):
     def _constraints_generation(self):
         """Wraps PixCon to use shared parameter state."""
         if self.zmap_instance is not None:
-            self.manager.config.fill_constraint_gaps = False
-            if self.source_pattern_path is not None:
-                self.manager.config.fill_constraint_gaps = True
             self.pixcon_instance = PixCon(
                 zmap=self.zmap_instance,
                 p=self.manager.config

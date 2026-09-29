@@ -11,10 +11,12 @@ from matplotlib import colormaps
 try:
     from asgram.utils.utils import _pixel_separation as _pix_sep
     from asgram.utils.params import Params
+    from asgram.depth_map_making import ZMap
     from asgram.pixel_constraint_calculating import PixCon
 except ModuleNotFoundError:
     from utils.utils import _pixel_separation as _pix_sep
     from utils.params import Params
+    from depth_map_making import ZMap
     from pixel_constraint_calculating import PixCon
 
 
@@ -92,29 +94,35 @@ def _color_palette_maker(palette='bw'):
 class SrcPat:
     """Stores and augments source patterns for autostereograms."""
 
-    def __init__(self, size, pc: Union[PixCon, None], p: Params, ref=None):
-        self.size = size
+    def __init__(self, zm: ZMap, pc: Union[PixCon, None], p: Params, ref=None):
+        self.zm = zm
         self.pc = pc
-        if self.pc is not None:
-            self.size = self.pc.zmap.size
         self.p = p
         self.ref = ref
-        np.random.seed(self.p.random_seed)
 
         self.sp_arr = np.array([])
         self.sp_img = Image.new('1', (0, 0))
         self.update()
 
+    @property
+    def size(self):
+        return self.zm.size
+
     def _fit_to_source(self, asg):
         """Refits the asgram pattern to match the PixCon source area."""
-        if (
-            (self.p.source_fit in ['estimate', 'exact'])
-            and (self.pc is not None)
-        ):
+        if self.p.source_fit in ['estimate', 'exact']:
+            pixcon_dummy = self.pc
+            if pixcon_dummy is None:
+                pixcon_dummy = PixCon(
+                    zmap=self.zm,
+                    p=self.p,
+                    update_on_init=False
+                )
+
             if 'exact' == self.p.source_fit:
-                src = self.pc.src_area
+                src = pixcon_dummy.src_area
             else:
-                src = self.pc.src_area_basic
+                src = pixcon_dummy.src_area_basic
             height = src.shape[1]
             assert asg.shape[2] == height
 
@@ -136,6 +144,7 @@ class SrcPat:
     def update(self):
         """Updates the source pattern according to class parameters."""
         print("Step: Source Pattern Making")
+        np.random.seed(self.p.random_seed)
         if self.ref is not None:
             asg = self.ref.copy()
             w, h = self.size
