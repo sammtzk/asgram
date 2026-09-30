@@ -6,16 +6,27 @@ shared parameters and establishes the layout of the control widget.
 Run this module with python -m asgram.gui.pyside_components.param_controls
 """
 
+import os
 import sys
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication, QGroupBox, QVBoxLayout, QHBoxLayout,
-    QLabel, QSlider, QCheckBox, QComboBox
+    QFileDialog, QLabel, QPushButton
 )
 try:
+    from asgram.utils.params import Params
     from asgram.gui.pyside_components.param_state import ParameterState
+    from asgram.gui.pyside_components.param_interactables import (
+        dbl_slider, int_slider, checkbox, dropdown
+    )
+    from asgram.utils.utils import _pixel_separation_summary
 except ModuleNotFoundError:
+    from utils.params import Params
     from gui.pyside_components.param_state import ParameterState
+    from gui.pyside_components.param_interactables import (
+        dbl_slider, int_slider, checkbox, dropdown
+    )
+    from utils.utils import _pixel_separation_summary
 
 
 class ParamControl(QGroupBox):
@@ -24,118 +35,105 @@ class ParamControl(QGroupBox):
     application.
     """
 
-    def __init__(self, manager: ParameterState, orientation='box'):
+    def __init__(self, manager: ParameterState, orientation='vertical'):
         super().__init__("Autostereogram Parameters")
         self.manager = manager
         self.orientation = orientation
         self._gui_init()
 
-    def labeled_dbl_slider(self, _text, _field, min=0, max=10, scale=1.0):
-        """Double slider for asgram parameters."""
-        default = getattr(self.manager.config, _field)
-        label = QLabel(f"{_text}: {default:.2f}")
-
-        tool = QSlider(Qt.Orientation.Horizontal)
-        tool.setRange(min, max)
-        tool.setValue(int(default * scale))
-        tool.valueChanged.connect(
-            lambda val: (
-                self.manager.param_update(_field, float(val) / scale),
-                label.setText(f"{_text}: {float(val) / scale:.2f}")
-            )
+    def _load_params(self):
+        params_path, _ = QFileDialog.getOpenFileName(
+            parent=self, caption="File Select",
+            dir="", filter="JSON Files (*.json)"
         )
 
-        return label, tool
+        if params_path:
+            load_dir, load_file = os.path.split(params_path)
+            file_name, _ = os.path.splitext(load_file)
+            loaded_params = Params.load(file_name, load_dir)
 
-    def labeled_int_slider(self, _text, _field, min=0, max=10):
-        """Integer slider for asgram parameters."""
-        default = getattr(self.manager.config, _field)
-        label = QLabel(f"{_text}: {default}")
+            for k, v in loaded_params.model_dump().items():
+                self.manager.param_update(k, v)
 
-        tool = QSlider(Qt.Orientation.Horizontal)
-        tool.setRange(min, max)
-        tool.setValue(default)
-        tool.valueChanged.connect(
-            lambda val: (
-                self.manager.param_update(_field, val),
-                label.setText(f"{_text}: {val}")
-            )
+    def _save_params(self):
+        params_path, _ = QFileDialog.getSaveFileName(
+            parent=self, caption="Save Autostereogram Parameters",
+            dir="", filter="JSON Files (*.json)"
         )
 
-        return label, tool
-
-    def labeled_checkbox(self, _text, _field):
-        """Checkbox for asgram parameters."""
-        default = getattr(self.manager.config, _field)
-        label = QLabel(f"{_text}: {default}")
-
-        tool = QCheckBox()
-        tool.setChecked(default)
-        tool.stateChanged.connect(
-            lambda state: (
-                self.manager.param_update(_field, 0 != state),
-                label.setText(f"{_text}: {0 != state}")
-            )
-        )
-
-        return label, tool
-
-    def labeled_dropdown(self, _text, _field):
-        """Dropdown for asgram parameters."""
-        cdp_items = self.manager.config.dropdown_lookup(_field)
-        cdp_default = next(iter(cdp_items), '')
-        label = QLabel(f"{_text}: {cdp_default}")
-
-        tool = QComboBox()
-        tool.addItems(list(cdp_items.keys()))
-        tool.currentTextChanged.connect(
-            lambda text: (
-                self.manager.param_update(_field, cdp_items[text]),
-                label.setText(f"{_text}: {text}")
-            )
-        )
-
-        return label, tool
+        if params_path:
+            save_dir, save_file = os.path.split(params_path)
+            file_name, _ = os.path.splitext(save_file)
+            self.manager.config.save(file_name, save_dir)
 
     def _gui_init(self):
+        # start info box ======================================================
+        info_box_group = QGroupBox("Pixel Constraint Summary")
+        info_box_layout = QVBoxLayout()
+
+        # labels
+        self.info00 = QLabel()
+        self.info01 = QLabel()
+        self.info01.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.info10 = QLabel()
+        self.info11 = QLabel()
+        self.info11.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.info20 = QLabel()
+        self.info21 = QLabel()
+        self.info21.setAlignment(Qt.AlignmentFlag.AlignRight)
+
+        def _update_info_box():
+            p = self.manager.config
+            info = _pixel_separation_summary(p.mu, p.dpi, p.cross)
+            info = tuple(s.strip().replace('\n', '') for s in info)
+
+            self.info00.setText(info[0])
+            self.info01.setText(info[1])
+            self.info10.setText(info[2])
+            self.info11.setText(info[3])
+            self.info20.setText(info[4])
+            self.info21.setText(info[5])
+
+        _update_info_box()
+        self.manager.broadcast_update.connect(_update_info_box)
+
+        self.info_box0 = QHBoxLayout()
+        self.info_box0.addWidget(self.info00)
+        self.info_box0.addWidget(self.info01)
+        info_box_layout.addLayout(self.info_box0)
+
+        self.info_box1 = QHBoxLayout()
+        self.info_box1.addWidget(self.info10)
+        self.info_box1.addWidget(self.info11)
+        info_box_layout.addLayout(self.info_box1)
+
+        self.info_box2 = QHBoxLayout()
+        self.info_box2.addWidget(self.info20)
+        self.info_box2.addWidget(self.info21)
+        info_box_layout.addLayout(self.info_box2)
+
+        # end info box
+        info_box_group.setLayout(info_box_layout)
+
         # start fundamental ===================================================
         fundamental_group = QGroupBox("Fundamental")
         fundamental_layout = QVBoxLayout()
 
-        # depth_of_field
-        self.dof_label, self.dof = self.labeled_dbl_slider(
-            'Depth of Field', 'depth_of_field', min=1, max=99, scale=100
-        )
-        fundamental_layout.addWidget(self.dof_label)
-        fundamental_layout.addWidget(self.dof)
-
-        # dots_per_inch
-        self.dpi_label, self.dpi = self.labeled_int_slider(
-            'Dots per Inch', 'dots_per_inch', min=1, max=2**12
-        )
-        fundamental_layout.addWidget(self.dpi_label)
-        fundamental_layout.addWidget(self.dpi)
-
-        # cross_view_flag
-        self.cvf_label, self.cvf = self.labeled_checkbox(
-            'Cross View', 'cross_view_flag'
-        )
-        fundamental_layout.addWidget(self.cvf_label)
-        fundamental_layout.addWidget(self.cvf)
-
-        # constraint_approach
-        self.ca_label, self.ca = self.labeled_dropdown(
-            'Constraint Approach', 'constraint_approach'
-        )
-        fundamental_layout.addWidget(self.ca_label)
-        fundamental_layout.addWidget(self.ca)
-
-        # parallelization_cores
-        self.pc_label, self.pc = self.labeled_int_slider(
-            'CPU Cores', 'parallelization_cores', min=-1, max=20
-        )
-        fundamental_layout.addWidget(self.pc_label)
-        fundamental_layout.addWidget(self.pc)
+        # fields
+        self.dof = dbl_slider(self.manager, 'depth_of_field', 1, 99, 100.0)
+        fundamental_layout.addLayout(self.dof)
+        self.dpi = int_slider(self.manager, 'dots_per_inch', 1, 2**12)
+        fundamental_layout.addLayout(self.dpi)
+        self.cvf = checkbox(self.manager, 'cross_view_flag')
+        fundamental_layout.addLayout(self.cvf)
+        self.ca = dropdown(self.manager, 'constraint_approach')
+        fundamental_layout.addLayout(self.ca)
+        self.fcg = checkbox(self.manager, 'fill_constraint_gaps')
+        fundamental_layout.addLayout(self.fcg)
+        self.hsr = checkbox(self.manager, 'hidden_surface_removal')
+        fundamental_layout.addLayout(self.hsr)
+        self.pc = int_slider(self.manager, 'parallelization_cores', -1, 20)
+        fundamental_layout.addLayout(self.pc)
 
         # end fundamental
         fundamental_group.setLayout(fundamental_layout)
@@ -144,124 +142,96 @@ class ParamControl(QGroupBox):
         depth_map_group = QGroupBox("Depth Map")
         depth_map_layout = QVBoxLayout()
 
-        # normalize_depth_map
-        self.ndm_label, self.ndm = self.labeled_checkbox(
-            'Normalize', 'normalize_depth_map'
-        )
-        depth_map_layout.addWidget(self.ndm_label)
-        depth_map_layout.addWidget(self.ndm)
-
-        # invert_depth_map
-        self.idm_label, self.idm = self.labeled_checkbox(
-            'Invert', 'invert_depth_map'
-        )
-        depth_map_layout.addWidget(self.idm_label)
-        depth_map_layout.addWidget(self.idm)
-
-        # depth_map_smoothing
-        self.dms_label, self.dms = self.labeled_checkbox(
-            'Integrated Smoothing', 'depth_map_smoothing'
-        )
-        depth_map_layout.addWidget(self.dms_label)
-        depth_map_layout.addWidget(self.dms)
-
-        # depth_map_bilateral_filter
-        self.dmbf_label, self.dmbf = self.labeled_checkbox(
-            'Bilateral Filter', 'depth_map_bilateral_filter'
-        )
-        depth_map_layout.addWidget(self.dmbf_label)
-        depth_map_layout.addWidget(self.dmbf)
-
-        # pad_depth_map
-        self.pdm_label, self.pdm = self.labeled_checkbox(
-            'Add Padding', 'pad_depth_map'
-        )
-        depth_map_layout.addWidget(self.pdm_label)
-        depth_map_layout.addWidget(self.pdm)
-
-        # scale_depth_map
-        self.sdm_label, self.sdm = self.labeled_dbl_slider(
-            'Resize', 'scale_depth_map', min=1, max=64, scale=4.0
-        )
-        depth_map_layout.addWidget(self.sdm_label)
-        depth_map_layout.addWidget(self.sdm)
+        # fields
+        self.ndm = checkbox(self.manager, 'normalize_depth_map')
+        depth_map_layout.addLayout(self.ndm)
+        self.idm = checkbox(self.manager, 'invert_depth_map')
+        depth_map_layout.addLayout(self.idm)
+        self.sdm = dbl_slider(self.manager, 'scale_depth_map', 1, 2**8, 16.0)
+        depth_map_layout.addLayout(self.sdm)
+        self.dmbf = checkbox(self.manager, 'depth_map_bilateral_filter')
+        depth_map_layout.addLayout(self.dmbf)
+        self.dms = checkbox(self.manager, 'depth_map_smoothing')
+        depth_map_layout.addLayout(self.dms)
+        self.pdm = checkbox(self.manager, 'pad_depth_map')
+        depth_map_layout.addLayout(self.pdm)
 
         # end depth map
         depth_map_group.setLayout(depth_map_layout)
 
-        # start image pattern =================================================
-        image_pattern_group = QGroupBox("Image Pattern")
-        image_pattern_layout = QVBoxLayout()
+        # start source pattern ================================================
+        source_pattern_group = QGroupBox("Source Pattern")
+        source_pattern_layout = QVBoxLayout()
 
-        # pattern_fit
-        self.pf_label, self.pf = self.labeled_dropdown(
-            'Pattern Fit', 'pattern_fit'
-        )
-        image_pattern_layout.addWidget(self.pf_label)
-        image_pattern_layout.addWidget(self.pf)
+        # fields
+        self.pf = dropdown(self.manager, 'pattern_fit')
+        source_pattern_layout.addLayout(self.pf)
+        self.sf = dropdown(self.manager, 'source_fit')
+        source_pattern_layout.addLayout(self.sf)
+        self.rpp = dropdown(self.manager, 'random_pattern_palette')
+        source_pattern_layout.addLayout(self.rpp)
+        self.rs = int_slider(self.manager, 'random_seed', 0, 9999)
+        source_pattern_layout.addLayout(self.rs)
 
-        # random_pattern_palette
-        self.rpp_label, self.rpp = self.labeled_dropdown(
-            'SIRDS Palette', 'random_pattern_palette'
-        )
-        image_pattern_layout.addWidget(self.rpp_label)
-        image_pattern_layout.addWidget(self.rpp)
-
-        # random_seed
-        self.pc_label, self.pc = self.labeled_int_slider(
-            'Random Seed', 'random_seed', min=0, max=9999
-        )
-        image_pattern_layout.addWidget(self.pc_label)
-        image_pattern_layout.addWidget(self.pc)
-
-        # end image pattern
-        image_pattern_group.setLayout(image_pattern_layout)
+        # end source pattern
+        source_pattern_group.setLayout(source_pattern_layout)
 
         # start postprocessing ================================================
         postprocessing_group = QGroupBox("Postprocessing")
         postprocessing_layout = QVBoxLayout()
 
-        # pixel_disparity_smoothing
-        self.pds_label, self.pds = self.labeled_checkbox(
-            'Pixel Disparity Smoothing', 'pixel_disparity_smoothing'
-        )
-        postprocessing_layout.addWidget(self.pds_label)
-        postprocessing_layout.addWidget(self.pds)
-
-        # convergence_dot_depth
-        self.cdd_label, self.cdd = self.labeled_dropdown(
-            'Convergence Dot Depth', 'convergence_dot_depth'
-        )
-        postprocessing_layout.addWidget(self.cdd_label)
-        postprocessing_layout.addWidget(self.cdd)
-
-        # convergence_dot_placement
-        self.cdp_label, self.cdp = self.labeled_dropdown(
-            'Convergence Dot Placement', 'convergence_dot_placement'
-        )
-        postprocessing_layout.addWidget(self.cdp_label)
-        postprocessing_layout.addWidget(self.cdp)
+        # fields
+        self.pds = checkbox(self.manager, 'pixel_disparity_smoothing')
+        postprocessing_layout.addLayout(self.pds)
+        self.cdd = dropdown(self.manager, 'convergence_dot_depth')
+        postprocessing_layout.addLayout(self.cdd)
+        self.cdp = dropdown(self.manager, 'convergence_dot_placement')
+        postprocessing_layout.addLayout(self.cdp)
 
         # end postprocessing
         postprocessing_group.setLayout(postprocessing_layout)
 
+        # start params management =============================================
+        params_management_group = QGroupBox("Manage Params")
+        params_management_layout = QHBoxLayout()
+
+        # buttons
+        self.load_params = QPushButton("Load Params")
+        self.load_params.clicked.connect(self._load_params)
+        params_management_layout.addWidget(self.load_params)
+
+        self.save_params = QPushButton("Save Params")
+        self.save_params.clicked.connect(self._save_params)
+        params_management_layout.addWidget(self.save_params)
+
+        # end params management
+        params_management_group.setLayout(params_management_layout)
+
         # final formatting and placement ======================================
         if 'vertical' == self.orientation:
             main_layout = QVBoxLayout(self)
+            main_layout.addWidget(info_box_group)
             main_layout.addWidget(fundamental_group)
             main_layout.addWidget(depth_map_group)
-            main_layout.addWidget(image_pattern_group)
+            main_layout.addWidget(source_pattern_group)
             main_layout.addWidget(postprocessing_group)
+            main_layout.addWidget(params_management_group)
         else:
-            main_layout = QHBoxLayout(self)
-            main_layout.addWidget(fundamental_group)
-            main_layout.addWidget(depth_map_group)
+            main_layout = QVBoxLayout(self)
+            mid_layout = QHBoxLayout()
+
+            mid_layout = QHBoxLayout()
+            mid_layout.addWidget(fundamental_group)
+            mid_layout.addWidget(depth_map_group)
 
             right_layout = QVBoxLayout()
-            right_layout.addWidget(image_pattern_group)
+            right_layout.addWidget(source_pattern_group)
             right_layout.addWidget(postprocessing_group)
+            mid_layout.addLayout(right_layout)
 
-            main_layout.addLayout(right_layout)
+            main_layout.addWidget(info_box_group)
+            main_layout.addLayout(mid_layout)
+            main_layout.addWidget(params_management_group)
 
 
 if __name__ == '__main__':
